@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Authentication</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .danger {
+            background: #dc3545;
+        }
+        .danger:hover {
+            background: #c82333;
+        }
+        .success {
+            background: #28a745;
+        }
+        .success:hover {
+            background: #218838;
+        }
+        .info {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .result.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .result.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Fleet Management - Authentication Debug</h1>
+    
+    <div class="section">
+        <h2>📊 Current State</h2>
+        <div id="currentState"></div>
+        <button onclick="checkCurrentState()">🔄 Refresh State</button>
+    </div>
+    
+    <div class="section">
+        <h2>🧹 Clear Authentication</h2>
+        <div class="info">
+            <strong>⚠️ Warning:</strong> This will clear all authentication data and log you out.
+        </div>
+        <button class="danger" onclick="clearAuth()">🗑️ Clear All Auth Data</button>
+    </div>
+    
+    <div class="section">
+        <h2>🔐 Test Login</h2>
+        <div class="info">
+            <strong>📧 Email:</strong> admin@fleet.com<br>
+            <strong>🔑 Password:</strong> admin123
+        </div>
+        <button class="success" onclick="testLogin()">🚀 Test Login</button>
+    </div>
+    
+    <div class="section">
+        <h2>🌐 Test API Connection</h2>
+        <button onclick="testAPI()">📡 Test Backend Connection</button>
+    </div>
+    
+    <div id="result"></div>
+    
+    <script>
+        function showResult(message, isSuccess = true) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `
+                <div class="result ${isSuccess ? 'success' : 'error'}">
+                    ${message}
+                </div>
+            `;
+        }
+        
+        function checkCurrentState() {
+            const token = localStorage.getItem('token');
+            const user = localStorage.getItem('user');
+            
+            const state = {
+                hasToken: !!token,
+                tokenPreview: token ? token.substring(0, 50) + '...' : 'None',
+                hasUser: !!user,
+                userPreview: user ? JSON.parse(user) : 'None',
+                localStorage: Object.keys(localStorage).filter(key => 
+                    key.includes('token') || key.includes('user') || key.includes('auth')
+                )
+            };
+            
+            document.getElementById('currentState').innerHTML = `
+                <pre>${JSON.stringify(state, null, 2)}</pre>
+            `;
+            
+            console.log('🔍 Current Auth State:', state);
+        }
+        
+        function clearAuth() {
+            console.log('🧹 Clearing all authentication data...');
+            
+            // Clear all auth-related localStorage
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('auth');
+            localStorage.removeItem('isAuthenticated');
+            
+            // Clear any other potential auth keys
+            Object.keys(localStorage).forEach(key => {
+                if (key.includes('token') || key.includes('user') || key.includes('auth')) {
+                    localStorage.removeItem(key);
+                }
+            });
+            
+            showResult('✅ All authentication data cleared! You can now try logging in fresh.');
+            checkCurrentState();
+        }
+        
+        async function testLogin() {
+            console.log('🔐 Testing login...');
+            
+            try {
+                const response = await fetch('http://localhost:5000/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@fleet.com',
+                        password: 'admin123'
+                    })
+                });
+                
+                console.log('📡 Login response status:', response.status);
+                
+                const data = await response.json();
+                console.log('📦 Login response data:', data);
+                
+                if (response.ok && data.success) {
+                    // Store the token
+                    localStorage.setItem('token', data.data.token);
+                    localStorage.setItem('user', JSON.stringify(data.data.user));
+                    
+                    showResult(`
+                        <h3>✅ Login Successful!</h3>
+                        <p><strong>User:</strong> ${data.data.user.firstName} ${data.data.user.lastName}</p>
+                        <p><strong>Email:</strong> ${data.data.user.email}</p>
+                        <p><strong>Role:</strong> ${data.data.user.role}</p>
+                        <p><strong>Token:</strong> ${data.data.token.substring(0, 50)}...</p>
+                        <p><strong>✨ You can now go to <a href="http://localhost:5173" target="_blank">http://localhost:5173</a> and you should be logged in!</strong></p>
+                    `);
+                    
+                    checkCurrentState();
+                } else {
+                    showResult(`
+                        <h3>❌ Login Failed</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <p><strong>Message:</strong> ${data.message || 'Unknown error'}</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `, false);
+                }
+            } catch (error) {
+                console.error('❌ Login error:', error);
+                showResult(`
+                    <h3>❌ Network Error</h3>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p>Make sure the backend is running on http://localhost:5000</p>
+                `, false);
+            }
+        }
+        
+        async function testAPI() {
+            console.log('📡 Testing API connection...');
+            
+            try {
+                const response = await fetch('http://localhost:5000/health');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult(`
+                        <h3>✅ Backend Connection Successful!</h3>
+                        <p><strong>Status:</strong> ${data.status}</p>
+                        <p><strong>Message:</strong> ${data.message}</p>
+                        <p><strong>Timestamp:</strong> ${data.timestamp}</p>
+                    `);
+                } else {
+                    showResult(`
+                        <h3>❌ Backend Error</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `, false);
+                }
+            } catch (error) {
+                console.error('❌ API test error:', error);
+                showResult(`
+                    <h3>❌ Backend Connection Failed</h3>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p>Make sure the backend is running on http://localhost:5000</p>
+                `, false);
+            }
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🔧 Debug page loaded');
+            checkCurrentState();
+        });
+    </script>
+</body>
+</html>

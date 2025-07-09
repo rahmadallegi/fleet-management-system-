@@ -1,0 +1,123 @@
+# Backend - Fleet Management System
+
+# ===== DEPENDENCIES =====
+node_modules/
+
+# ===== BUILD OUTPUT =====
+dist/
+build/
+
+# ===== ENVIRONMENT VARIABLES =====
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.staging
+
+# ===== LOGS =====
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+app.log
+error.log
+access.log
+combined.log
+
+# ===== RUNTIME DATA =====
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# ===== TESTING & COVERAGE =====
+coverage/
+.nyc_output/
+test-results/
+
+# ===== CACHE =====
+.npm
+.yarn-integrity
+*.tgz
+
+# ===== DATABASE =====
+*.db
+*.sqlite
+*.sqlite3
+dump/
+
+# ===== UPLOADS & FILES =====
+uploads/
+public/uploads/
+media/
+files/
+
+# ===== SESSION FILES =====
+sessions/
+
+# ===== SSL CERTIFICATES =====
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+ssl/
+
+# ===== EDITOR DIRECTORIES AND FILES =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== OS GENERATED FILES =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# ===== TEMPORARY FILES =====
+*.tmp
+*.temp
+tmp/
+temp/
+
+# ===== BACKUP FILES =====
+*.bak
+*.backup
+*.old
+
+# ===== EMAIL TEMPLATES CACHE =====
+.email-cache/
+
+# ===== API DOCUMENTATION =====
+docs/build/
+
+# ===== MONITORING =====
+.sentry/
+newrelic_agent.log
+
+# ===== DOCKER =====
+.dockerignore
+docker-compose.override.yml
+
+# ===== CLOUD PLATFORMS =====
+.aws/
+
+# ===== MISC =====
+.tern-port
+.fusebox/
+.dynamodb/
+.serverless/
+
+# ===== GENERATED REPORTS =====
+reports/
+exports/

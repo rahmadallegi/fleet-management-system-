@@ -1,0 +1,30 @@
+{
+  "name": "fleet-management-database",
+  "version": "1.0.0",
+  "description": "Database setup and seed scripts for Fleet Management System",
+  "main": "setup.js",
+  "scripts": {
+    "setup": "node setup.js",
+    "seed": "mongosh < mongodb/seed_data.js",
+    "reset": "node setup.js",
+    "test-connection": "node -e \"require('./setup.js').setupDatabase().then(() => process.exit(0)).catch(() => process.exit(1))\""
+  },
+  "keywords": [
+    "fleet-management",
+    "database",
+    "mongodb",
+    "sql",
+    "seed-data"
+  ],
+  "author": "Fleet Management Team",
+  "license": "MIT",
+  "dependencies": {
+    "mongodb": "^6.0.0"
+  },
+  "devDependencies": {
+    "dotenv": "^16.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

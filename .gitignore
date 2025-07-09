@@ -1,0 +1,220 @@
+# Fleet Management System - Comprehensive Git Ignore
+
+# ===== DEPENDENCIES =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ===== PRODUCTION BUILDS =====
+/backend/dist
+/backend/build
+/frontend/dist
+/frontend/build
+dist/
+dist-ssr/
+build/
+out/
+
+# ===== ENVIRONMENT VARIABLES =====
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.staging
+
+# ===== LOGS =====
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# ===== RUNTIME DATA =====
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# ===== TESTING & COVERAGE =====
+coverage/
+*.lcov
+.nyc_output
+test-results/
+playwright-report/
+.jest/
+
+# ===== CACHE DIRECTORIES =====
+.npm
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+.cache
+.parcel-cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# ===== DEPENDENCY DIRECTORIES =====
+jspm_packages/
+web_modules/
+
+# ===== TYPESCRIPT =====
+*.tsbuildinfo
+
+# ===== ESLINT & STYLELINT =====
+.eslintcache
+.stylelintcache
+
+# ===== REPL HISTORY =====
+.node_repl_history
+
+# ===== NPM PACKAGES =====
+*.tgz
+
+# ===== YARN =====
+.yarn-integrity
+
+# ===== NEXT.JS =====
+.next
+.next/
+
+# ===== NUXT.JS =====
+.nuxt
+
+# ===== GATSBY =====
+.cache/
+public
+
+# ===== VITE =====
+dist/
+dist-ssr/
+
+# ===== STORYBOOK =====
+.out
+.storybook-out
+storybook-static
+
+# ===== IDE & EDITORS =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ===== OS GENERATED FILES =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# ===== TEMPORARY FILES =====
+*.tmp
+*.temp
+tmp/
+temp/
+
+# ===== DATABASE FILES =====
+*.db
+*.sqlite
+*.sqlite3
+dump/
+
+# ===== UPLOADS & MEDIA =====
+uploads/
+public/uploads/
+media/
+
+# ===== SSL CERTIFICATES =====
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# ===== DOCKER =====
+.dockerignore
+docker-compose.override.yml
+
+# ===== CLOUD PLATFORMS =====
+.vercel
+.netlify
+.aws/
+
+# ===== TERRAFORM =====
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# ===== KUBERNETES =====
+*.kubeconfig
+
+# ===== BACKUP FILES =====
+*.bak
+*.backup
+*.old
+
+# ===== ARCHIVE FILES =====
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# ===== FLEET MANAGEMENT SPECIFIC =====
+# Application logs
+app.log
+error.log
+access.log
+
+# User uploaded files
+/backend/uploads/
+/frontend/public/uploads/
+
+# Generated reports
+reports/
+exports/
+
+# Session files
+sessions/
+
+# Email templates cache
+.email-cache/
+
+# API documentation
+/docs/build/
+
+# ===== PACKAGE MANAGER LOCKS =====
+# Keep the one you're using, comment out others:
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# ===== LOCAL DEVELOPMENT =====
+.local
+.vscode/settings.json
+.history/
+
+# ===== MONITORING & ANALYTICS =====
+.sentry/
+newrelic_agent.log
+
+# ===== MISC =====
+.tern-port
+.fusebox/
+.dynamodb/
+.serverless/

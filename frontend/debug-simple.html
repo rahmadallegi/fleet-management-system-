@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Navigation Debug</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Simple Navigation Debug</h1>
+    
+    <div class="section">
+        <h2>📊 Current Status</h2>
+        <div id="status">Checking...</div>
+    </div>
+    
+    <div class="section">
+        <h2>🧪 Direct URL Tests</h2>
+        <p>These buttons will directly navigate to each page URL:</p>
+        <button onclick="testURL('/dashboard')">Dashboard</button>
+        <button onclick="testURL('/dashboard/vehicles')">Vehicles</button>
+        <button onclick="testURL('/dashboard/drivers')">Drivers</button>
+        <button onclick="testURL('/dashboard/trips')">Trips</button>
+        <button onclick="testURL('/dashboard/fuel')">Fuel</button>
+        <button onclick="testURL('/dashboard/maintenance')">Maintenance</button>
+        <button onclick="testURL('/dashboard/reports')">Reports</button>
+        <button onclick="testURL('/dashboard/settings')">Settings</button>
+    </div>
+    
+    <div class="section">
+        <h2>📋 Debug Log</h2>
+        <div id="log" class="log">Starting debug session...\n</div>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+    
+    <div class="section">
+        <h2>🔍 Instructions</h2>
+        <ol>
+            <li><strong>Click each URL test button</strong> above</li>
+            <li><strong>Watch the debug log</strong> for any errors</li>
+            <li><strong>If a page crashes</strong>, come back to this page and check the log</li>
+            <li><strong>Tell me which specific page crashes</strong> and what error appears</li>
+        </ol>
+    </div>
+    
+    <script>
+        let logElement = document.getElementById('log');
+        
+        function addLog(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(`[DEBUG] ${message}`);
+        }
+        
+        function clearLog() {
+            logElement.textContent = 'Log cleared...\n';
+        }
+        
+        function testURL(url) {
+            addLog(`🧪 Testing navigation to: ${url}`);
+            
+            try {
+                // First, let's test if the URL is accessible
+                addLog(`📡 Attempting to navigate to: ${url}`);
+                
+                // Use window.location to navigate
+                window.location.href = `http://localhost:5173${url}`;
+                
+                addLog(`✅ Navigation initiated successfully`);
+            } catch (error) {
+                addLog(`❌ Navigation failed: ${error.message}`);
+                document.getElementById('status').innerHTML = `
+                    <div class="error">
+                        <strong>Navigation Error:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        function checkStatus() {
+            const currentURL = window.location.href;
+            const isOnDebugPage = currentURL.includes('debug-simple.html');
+            
+            document.getElementById('status').innerHTML = `
+                <div class="success">
+                    <strong>Current URL:</strong> ${currentURL}<br>
+                    <strong>Debug Page:</strong> ${isOnDebugPage ? 'Yes' : 'No'}<br>
+                    <strong>Frontend Running:</strong> ${currentURL.includes('localhost:5173') ? 'Yes' : 'No'}
+                </div>
+            `;
+            
+            addLog(`📍 Current location: ${currentURL}`);
+            addLog(`🔧 Debug page loaded successfully`);
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            checkStatus();
+            addLog(`🚀 Debug session started`);
+        });
+        
+        // Catch any global errors
+        window.addEventListener('error', (event) => {
+            addLog(`🚨 Global error caught: ${event.error?.message || event.message}`);
+            addLog(`🚨 Error stack: ${event.error?.stack || 'No stack trace'}`);
+        });
+        
+        window.addEventListener('unhandledrejection', (event) => {
+            addLog(`🚨 Unhandled promise rejection: ${event.reason}`);
+        });
+    </script>
+</body>
+</html>
