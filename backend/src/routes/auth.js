@@ -1,7 +1,7 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { User } from '../models/index.js';
+import User from '../models/User.js';
 import { generateToken, authenticate, authRateLimit, logAuthEvent } from '../middleware/auth.js';
 import { authValidations } from '../middleware/validation.js';
 
@@ -10,7 +10,7 @@ const router = express.Router();
 // @route   POST /api/auth/register
 // @desc    Register a new user
 // @access  Public (but can be restricted to admin only)
-router.post('/register', 
+router.post('/register',
   authRateLimit(3, 15 * 60 * 1000), // 3 attempts per 15 minutes
   logAuthEvent('REGISTER'),
   authValidations.register,
@@ -19,7 +19,7 @@ router.post('/register',
       const { firstName, lastName, email, password, phone, role = 'viewer', department, employeeId } = req.body;
 
       // Check if user already exists
-      const existingUser = await User.findOne({ email: email.toLowerCase() });
+      const existingUser = await User.findOne({ where: { email: email.toLowerCase() } });
       if (existingUser) {
         return res.status(400).json({
           success: false,
@@ -29,7 +29,7 @@ router.post('/register',
 
       // Check if employee ID is already taken (if provided)
       if (employeeId) {
-        const existingEmployee = await User.findOne({ employeeId });
+        const existingEmployee = await User.findOne({ where: { employeeId } });
         if (existingEmployee) {
           return res.status(400).json({
             success: false,
@@ -39,7 +39,7 @@ router.post('/register',
       }
 
       // Create new user
-      const user = new User({
+      const user = await User.create({
         firstName,
         lastName,
         email: email.toLowerCase(),
@@ -48,13 +48,11 @@ router.post('/register',
         role,
         department,
         employeeId,
-        createdBy: req.user?._id // If admin is creating the user
+        createdBy: req.user?.id // If admin is creating the user
       });
 
-      await user.save();
-
       // Generate token
-      const token = generateToken(user._id);
+      const token = generateToken(user.id);
 
       // Remove password from response
       const userResponse = user.toJSON();
@@ -71,9 +69,9 @@ router.post('/register',
 
     } catch (error) {
       console.error('Registration error:', error);
-      
-      if (error.code === 11000) {
-        const field = Object.keys(error.keyPattern)[0];
+
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        const field = Object.keys(error.fields)[0];
         return res.status(400).json({
           success: false,
           message: `${field} already exists`
@@ -101,8 +99,8 @@ router.post('/login',
       const { email, password } = req.body;
 
       // Find user and include password for comparison
-      const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
-      
+      const user = await User.findOne({ where: { email: email.toLowerCase() } });
+
       if (!user) {
         return res.status(401).json({
           success: false,
@@ -111,7 +109,7 @@ router.post('/login',
       }
 
       // Check if account is locked
-      if (user.isLocked) {
+      if (user.lockUntil && user.lockUntil > new Date()) {
         return res.status(401).json({
           success: false,
           message: 'Account is temporarily locked due to too many failed login attempts'
@@ -128,11 +126,11 @@ router.post('/login',
 
       // Verify password
       const isPasswordValid = await user.comparePassword(password);
-      
+
       if (!isPasswordValid) {
         // Increment login attempts
-        await user.incLoginAttempts();
-        
+        await user.update({ loginAttempts: user.loginAttempts + 1 });
+
         return res.status(401).json({
           success: false,
           message: 'Invalid email or password'
@@ -141,15 +139,14 @@ router.post('/login',
 
       // Reset login attempts on successful login
       if (user.loginAttempts > 0) {
-        await user.resetLoginAttempts();
+        await user.update({ loginAttempts: 0, lockUntil: null });
       }
 
       // Update last login
-      user.lastLogin = new Date();
-      await user.save();
+      await user.update({ lastLogin: new Date() });
 
       // Generate token
-      const token = generateToken(user._id);
+      const token = generateToken(user.id);
 
       // Remove sensitive data from response
       const userResponse = user.toJSON();
@@ -206,8 +203,8 @@ router.put('/change-password',
       const { currentPassword, password } = req.body;
 
       // Get user with password
-      const user = await User.findById(req.user._id).select('+password');
-      
+      const user = await User.findByPk(req.user.id);
+
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -217,7 +214,7 @@ router.put('/change-password',
 
       // Verify current password
       const isCurrentPasswordValid = await user.comparePassword(currentPassword);
-      
+
       if (!isCurrentPasswordValid) {
         return res.status(400).json({
           success: false,
@@ -226,9 +223,7 @@ router.put('/change-password',
       }
 
       // Update password
-      user.password = password;
-      user.updatedBy = req.user._id;
-      await user.save();
+      await user.update({ password });
 
       res.json({
         success: true,
@@ -255,8 +250,8 @@ router.post('/forgot-password',
     try {
       const { email } = req.body;
 
-      const user = await User.findOne({ email: email.toLowerCase() });
-      
+      const user = await User.findOne({ where: { email: email.toLowerCase() } });
+
       if (!user) {
         // Don't reveal if email exists or not
         return res.json({
@@ -270,9 +265,10 @@ router.post('/forgot-password',
       const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
 
       // Set reset token and expiry (10 minutes)
-      user.passwordResetToken = hashedToken;
-      user.passwordResetExpires = new Date(Date.now() + 10 * 60 * 1000);
-      await user.save();
+      await user.update({
+        passwordResetToken: hashedToken,
+        passwordResetExpires: new Date(Date.now() + 10 * 60 * 1000),
+      });
 
       // TODO: Send email with reset link
       // For now, just return the token (remove in production)
@@ -309,8 +305,10 @@ router.post('/reset-password',
 
       // Find user with valid reset token
       const user = await User.findOne({
-        passwordResetToken: hashedToken,
-        passwordResetExpires: { $gt: new Date() }
+        where: {
+          passwordResetToken: hashedToken,
+          passwordResetExpires: { [Op.gt]: new Date() },
+        },
       });
 
       if (!user) {
@@ -321,12 +319,13 @@ router.post('/reset-password',
       }
 
       // Update password and clear reset token
-      user.password = password;
-      user.passwordResetToken = undefined;
-      user.passwordResetExpires = undefined;
-      user.loginAttempts = 0;
-      user.lockUntil = undefined;
-      await user.save();
+      await user.update({
+        password,
+        passwordResetToken: null,
+        passwordResetExpires: null,
+        loginAttempts: 0,
+        lockUntil: null,
+      });
 
       res.json({
         success: true,
@@ -350,7 +349,7 @@ router.post('/logout', authenticate, async (req, res) => {
   try {
     // In a more sophisticated setup, you might want to blacklist the token
     // For now, we'll just return success and let client remove the token
-    
+
     res.json({
       success: true,
       message: 'Logout successful'

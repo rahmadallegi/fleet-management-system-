@@ -2,6 +2,7 @@ import express from 'express';
 import { Vehicle, Driver } from '../models/index.js';
 import { authenticate, authorize, authorizeVehicleAccess } from '../middleware/auth.js';
 import { vehicleValidations, commonValidations } from '../middleware/validation.js';
+import { Op } from 'sequelize';
 
 const router = express.Router();
 
@@ -26,49 +27,49 @@ router.get('/',
       } = req.query;
 
       // Build filter object
-      let filter = {};
-      
+      let where = {};
+
       // Role-based filtering
       if (req.user.role === 'driver') {
         // Drivers can only see their assigned vehicles
-        filter.assignedDriver = req.user._id;
+        where.assignedDriverId = req.user.id;
       }
-      
-      if (status) filter.status = status;
-      if (availability) filter.availability = availability;
-      if (type) filter.type = type;
-      if (make) filter.make = { $regex: make, $options: 'i' };
-      
+
+      if (status) where.status = status;
+      if (availability) where.availability = availability;
+      if (type) where.type = type;
+      if (make) where.make = { [Op.iLike]: `%${make}%` };
+
       if (search) {
-        filter.$or = [
-          { plateNumber: { $regex: search, $options: 'i' } },
-          { make: { $regex: search, $options: 'i' } },
-          { model: { $regex: search, $options: 'i' } },
-          { vin: { $regex: search, $options: 'i' } }
+        where[Op.or] = [
+          { plateNumber: { [Op.iLike]: `%${search}%` } },
+          { make: { [Op.iLike]: `%${search}%` } },
+          { model: { [Op.iLike]: `%${search}%` } },
+          { vin: { [Op.iLike]: `%${search}%` } }
         ];
       }
 
-      // Build sort object
-      const sortOrder = sort === 'desc' ? -1 : 1;
-      const sortObj = { [sortBy]: sortOrder };
+      // Build order array
+      const order = [[sortBy, sort.toUpperCase()]];
 
-      // Calculate pagination
-      const skip = (parseInt(page) - 1) * parseInt(limit);
+      // Calculate offset
+      const offset = (parseInt(page) - 1) * parseInt(limit);
 
       // Execute query
-      const [vehicles, total] = await Promise.all([
-        Vehicle.find(filter)
-          .sort(sortObj)
-          .skip(skip)
-          .limit(parseInt(limit))
-          .populate('assignedDriver', 'firstName lastName email phone')
-          .populate('createdBy', 'firstName lastName email')
-          .populate('updatedBy', 'firstName lastName email'),
-        Vehicle.countDocuments(filter)
-      ]);
+      const { count, rows: vehicles } = await Vehicle.findAndCountAll({
+        where,
+        order,
+        offset,
+        limit: parseInt(limit),
+        include: [
+          { model: Driver, as: 'assignedDriver', attributes: ['firstName', 'lastName', 'email', 'phone'] },
+          { model: User, as: 'createdBy', attributes: ['firstName', 'lastName', 'email'] },
+          { model: User, as: 'updatedBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       // Calculate pagination info
-      const totalPages = Math.ceil(total / parseInt(limit));
+      const totalPages = Math.ceil(count / parseInt(limit));
       const hasNextPage = parseInt(page) < totalPages;
       const hasPrevPage = parseInt(page) > 1;
 
@@ -79,7 +80,7 @@ router.get('/',
           pagination: {
             currentPage: parseInt(page),
             totalPages,
-            totalVehicles: total,
+            totalVehicles: count,
             hasNextPage,
             hasPrevPage,
             limit: parseInt(limit)
@@ -105,9 +106,11 @@ router.get('/available',
   authorize('admin', 'dispatcher'),
   async (req, res) => {
     try {
-      const vehicles = await Vehicle.findAvailable()
-        .populate('assignedDriver', 'firstName lastName email')
-        .sort({ plateNumber: 1 });
+      const vehicles = await Vehicle.findAll({
+        where: { status: 'active', availability: 'available' },
+        include: [{ model: Driver, as: 'assignedDriver', attributes: ['firstName', 'lastName', 'email'] }],
+        order: [['plateNumber', 'ASC']]
+      });
 
       res.json({
         success: true,
@@ -134,10 +137,13 @@ router.get('/:id',
     try {
       const { id } = req.params;
 
-      const vehicle = await Vehicle.findById(id)
-        .populate('assignedDriver', 'firstName lastName email phone license')
-        .populate('createdBy', 'firstName lastName email')
-        .populate('updatedBy', 'firstName lastName email');
+      const vehicle = await Vehicle.findByPk(id, {
+        include: [
+          { model: Driver, as: 'assignedDriver', attributes: ['firstName', 'lastName', 'email', 'phone', 'license'] },
+          { model: User, as: 'createdBy', attributes: ['firstName', 'lastName', 'email'] },
+          { model: User, as: 'updatedBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       if (!vehicle) {
         return res.status(404).json({
@@ -172,38 +178,17 @@ router.post('/',
     try {
       const vehicleData = {
         ...req.body,
-        createdBy: req.user._id
+        createdById: req.user.id
       };
 
-      // Check if plate number already exists
-      const existingVehicle = await Vehicle.findOne({ 
-        plateNumber: vehicleData.plateNumber.toUpperCase() 
+      const vehicle = await Vehicle.create(vehicleData);
+
+      const populatedVehicle = await Vehicle.findByPk(vehicle.id, {
+        include: [
+          { model: Driver, as: 'assignedDriver', attributes: ['firstName', 'lastName', 'email'] },
+          { model: User, as: 'createdBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
       });
-      
-      if (existingVehicle) {
-        return res.status(400).json({
-          success: false,
-          message: 'Vehicle with this plate number already exists'
-        });
-      }
-
-      // Check if VIN already exists (if provided)
-      if (vehicleData.vin) {
-        const existingVin = await Vehicle.findOne({ vin: vehicleData.vin.toUpperCase() });
-        if (existingVin) {
-          return res.status(400).json({
-            success: false,
-            message: 'Vehicle with this VIN already exists'
-          });
-        }
-      }
-
-      const vehicle = new Vehicle(vehicleData);
-      await vehicle.save();
-
-      const populatedVehicle = await Vehicle.findById(vehicle._id)
-        .populate('assignedDriver', 'firstName lastName email')
-        .populate('createdBy', 'firstName lastName email');
 
       res.status(201).json({
         success: true,
@@ -213,9 +198,9 @@ router.post('/',
 
     } catch (error) {
       console.error('Create vehicle error:', error);
-      
-      if (error.code === 11000) {
-        const field = Object.keys(error.keyPattern)[0];
+
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        const field = Object.keys(error.fields)[0];
         return res.status(400).json({
           success: false,
           message: `${field} already exists`
@@ -242,10 +227,10 @@ router.put('/:id',
       const { id } = req.params;
       const updates = {
         ...req.body,
-        updatedBy: req.user._id
+        updatedById: req.user.id
       };
 
-      const vehicle = await Vehicle.findById(id);
+      const vehicle = await Vehicle.findByPk(id);
       if (!vehicle) {
         return res.status(404).json({
           success: false,
@@ -253,38 +238,15 @@ router.put('/:id',
         });
       }
 
-      // Check for plate number uniqueness if being updated
-      if (updates.plateNumber && updates.plateNumber.toUpperCase() !== vehicle.plateNumber) {
-        const existingVehicle = await Vehicle.findOne({ 
-          plateNumber: updates.plateNumber.toUpperCase() 
-        });
-        if (existingVehicle) {
-          return res.status(400).json({
-            success: false,
-            message: 'Plate number already exists'
-          });
-        }
-      }
+      await vehicle.update(updates);
 
-      // Check for VIN uniqueness if being updated
-      if (updates.vin && updates.vin.toUpperCase() !== vehicle.vin) {
-        const existingVin = await Vehicle.findOne({ vin: updates.vin.toUpperCase() });
-        if (existingVin) {
-          return res.status(400).json({
-            success: false,
-            message: 'VIN already exists'
-          });
-        }
-      }
-
-      const updatedVehicle = await Vehicle.findByIdAndUpdate(
-        id,
-        updates,
-        { new: true, runValidators: true }
-      )
-        .populate('assignedDriver', 'firstName lastName email')
-        .populate('createdBy', 'firstName lastName email')
-        .populate('updatedBy', 'firstName lastName email');
+      const updatedVehicle = await Vehicle.findByPk(id, {
+        include: [
+          { model: Driver, as: 'assignedDriver', attributes: ['firstName', 'lastName', 'email'] },
+          { model: User, as: 'createdBy', attributes: ['firstName', 'lastName', 'email'] },
+          { model: User, as: 'updatedBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       res.json({
         success: true,
@@ -294,9 +256,9 @@ router.put('/:id',
 
     } catch (error) {
       console.error('Update vehicle error:', error);
-      
-      if (error.code === 11000) {
-        const field = Object.keys(error.keyPattern)[0];
+
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        const field = Object.keys(error.fields)[0];
         return res.status(400).json({
           success: false,
           message: `${field} already exists`
@@ -321,7 +283,7 @@ router.delete('/:id',
     try {
       const { id } = req.params;
 
-      const vehicle = await Vehicle.findById(id);
+      const vehicle = await Vehicle.findByPk(id);
       if (!vehicle) {
         return res.status(404).json({
           success: false,
@@ -329,15 +291,13 @@ router.delete('/:id',
         });
       }
 
-      // Check if vehicle is currently assigned to active trips
-      // TODO: Add trip check when trip model is implemented
-
       // Soft delete by setting status to retired
-      vehicle.status = 'retired';
-      vehicle.availability = 'out-of-service';
-      vehicle.assignedDriver = null;
-      vehicle.updatedBy = req.user._id;
-      await vehicle.save();
+      await vehicle.update({
+        status: 'retired',
+        availability: 'out-of-service',
+        assignedDriverId: null,
+        updatedById: req.user.id
+      });
 
       res.json({
         success: true,
@@ -373,7 +333,7 @@ router.put('/:id/assign-driver',
       }
 
       // Check if vehicle exists
-      const vehicle = await Vehicle.findById(id);
+      const vehicle = await Vehicle.findByPk(id);
       if (!vehicle) {
         return res.status(404).json({
           success: false,
@@ -382,7 +342,7 @@ router.put('/:id/assign-driver',
       }
 
       // Check if driver exists and is available
-      const driver = await Driver.findById(driverId);
+      const driver = await Driver.findByPk(driverId);
       if (!driver) {
         return res.status(404).json({
           success: false,
@@ -398,11 +358,8 @@ router.put('/:id/assign-driver',
       }
 
       // Check if driver is already assigned to another vehicle
-      const existingAssignment = await Vehicle.findOne({ 
-        assignedDriver: driverId,
-        _id: { $ne: id }
-      });
-      
+      const existingAssignment = await Vehicle.findOne({ where: { assignedDriverId: driverId, id: { [Op.ne]: id } } });
+
       if (existingAssignment) {
         return res.status(400).json({
           success: false,
@@ -411,12 +368,11 @@ router.put('/:id/assign-driver',
       }
 
       // Assign driver to vehicle
-      vehicle.assignedDriver = driverId;
-      vehicle.updatedBy = req.user._id;
-      await vehicle.save();
+      await vehicle.update({ assignedDriverId: driverId, updatedById: req.user.id });
 
-      const updatedVehicle = await Vehicle.findById(id)
-        .populate('assignedDriver', 'firstName lastName email phone');
+      const updatedVehicle = await Vehicle.findByPk(id, {
+        include: [{ model: Driver, as: 'assignedDriver', attributes: ['firstName', 'lastName', 'email', 'phone'] }]
+      });
 
       res.json({
         success: true,
@@ -444,7 +400,7 @@ router.put('/:id/unassign-driver',
     try {
       const { id } = req.params;
 
-      const vehicle = await Vehicle.findById(id);
+      const vehicle = await Vehicle.findByPk(id);
       if (!vehicle) {
         return res.status(404).json({
           success: false,
@@ -452,20 +408,15 @@ router.put('/:id/unassign-driver',
         });
       }
 
-      if (!vehicle.assignedDriver) {
+      if (!vehicle.assignedDriverId) {
         return res.status(400).json({
           success: false,
           message: 'No driver is currently assigned to this vehicle'
         });
       }
 
-      // Check if vehicle is currently on an active trip
-      // TODO: Add trip check when trip model is implemented
-
       // Unassign driver
-      vehicle.assignedDriver = null;
-      vehicle.updatedBy = req.user._id;
-      await vehicle.save();
+      await vehicle.update({ assignedDriverId: null, updatedById: req.user.id });
 
       res.json({
         success: true,
@@ -500,7 +451,7 @@ router.put('/:id/status',
         });
       }
 
-      const vehicle = await Vehicle.findById(id);
+      const vehicle = await Vehicle.findByPk(id);
       if (!vehicle) {
         return res.status(404).json({
           success: false,
@@ -509,14 +460,16 @@ router.put('/:id/status',
       }
 
       // Update status and/or availability
-      if (status) vehicle.status = status;
-      if (availability) vehicle.availability = availability;
-      vehicle.updatedBy = req.user._id;
+      const updates = {};
+      if (status) updates.status = status;
+      if (availability) updates.availability = availability;
+      updates.updatedById = req.user.id;
 
-      await vehicle.save();
+      await vehicle.update(updates);
 
-      const updatedVehicle = await Vehicle.findById(id)
-        .populate('assignedDriver', 'firstName lastName email');
+      const updatedVehicle = await Vehicle.findByPk(id, {
+        include: [{ model: Driver, as: 'assignedDriver', attributes: ['firstName', 'lastName', 'email'] }]
+      });
 
       res.json({
         success: true,
@@ -542,20 +495,18 @@ router.get('/stats/overview',
   authorize('admin', 'dispatcher'),
   async (req, res) => {
     try {
-      const stats = await Vehicle.aggregate([
-        {
-          $group: {
-            _id: null,
-            totalVehicles: { $sum: 1 },
-            activeVehicles: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } },
-            availableVehicles: { $sum: { $cond: [{ $eq: ['$availability', 'available'] }, 1, 0] } },
-            inUseVehicles: { $sum: { $cond: [{ $eq: ['$availability', 'in-use'] }, 1, 0] } },
-            maintenanceVehicles: { $sum: { $cond: [{ $eq: ['$availability', 'maintenance'] }, 1, 0] } },
-            outOfServiceVehicles: { $sum: { $cond: [{ $eq: ['$availability', 'out-of-service'] }, 1, 0] } },
-            assignedVehicles: { $sum: { $cond: [{ $ne: ['$assignedDriver', null] }, 1, 0] } }
-          }
-        }
-      ]);
+      const stats = await Vehicle.findAll({
+        attributes: [
+          [sequelize.fn('COUNT', sequelize.col('id')), 'totalVehicles'],
+          [sequelize.fn('SUM', sequelize.literal('CASE WHEN status = \'active\' THEN 1 ELSE 0 END')), 'activeVehicles'],
+          [sequelize.fn('SUM', sequelize.literal('CASE WHEN availability = \'available\' THEN 1 ELSE 0 END')), 'availableVehicles'],
+          [sequelize.fn('SUM', sequelize.literal('CASE WHEN availability = \'in-use\' THEN 1 ELSE 0 END')), 'inUseVehicles'],
+          [sequelize.fn('SUM', sequelize.literal('CASE WHEN availability = \'maintenance\' THEN 1 ELSE 0 END')), 'maintenanceVehicles'],
+          [sequelize.fn('SUM', sequelize.literal('CASE WHEN availability = \'out-of-service\' THEN 1 ELSE 0 END')), 'outOfServiceVehicles'],
+          [sequelize.fn('SUM', sequelize.literal('CASE WHEN \"assignedDriverId\" IS NOT NULL THEN 1 ELSE 0 END')), 'assignedVehicles'],
+        ],
+        raw: true,
+      });
 
       const overview = stats[0] || {
         totalVehicles: 0,

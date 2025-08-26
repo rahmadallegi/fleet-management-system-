@@ -22,6 +22,7 @@
   "license": "MIT",
   "dependencies": {
     "@heroicons/react": "^2.2.0",
+    "@sequelize/mssql": "^7.0.0-alpha.46",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.0.1",
@@ -31,7 +32,9 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.16.1",
-    "morgan": "^1.10.0"
+    "morgan": "^1.10.0",
+    "sequelize": "^6.37.7",
+    "tedious": "^19.0.0"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",

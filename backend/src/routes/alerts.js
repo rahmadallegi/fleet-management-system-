@@ -2,6 +2,7 @@ import express from 'express';
 import { Alert, Vehicle, Driver, Trip } from '../models/index.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { commonValidations } from '../middleware/validation.js';
+import { Op } from 'sequelize';
 
 const router = express.Router();
 
@@ -21,50 +22,50 @@ router.get('/',
         status,
         severity,
         type,
-        vehicle,
-        driver,
+        vehicleId,
+        driverId,
         acknowledged
       } = req.query;
 
       // Build filter object
-      let filter = {};
-      
+      let where = {};
+
       // Role-based filtering
       if (req.user.role === 'driver') {
-        filter.driver = req.user._id;
+        where.driverId = req.user.id;
       }
-      
-      if (status) filter.status = status;
-      if (severity) filter.severity = severity;
-      if (type) filter.type = type;
-      if (vehicle) filter.vehicle = vehicle;
-      if (driver && req.user.role !== 'driver') filter.driver = driver;
-      if (acknowledged !== undefined) filter['acknowledgment.acknowledged'] = acknowledged === 'true';
 
-      // Build sort object
-      const sortOrder = sort === 'desc' ? -1 : 1;
-      const sortObj = { [sortBy]: sortOrder };
+      if (status) where.status = status;
+      if (severity) where.severity = severity;
+      if (type) where.type = type;
+      if (vehicleId) where.vehicleId = vehicleId;
+      if (driverId && req.user.role !== 'driver') where.driverId = driverId;
+      if (acknowledged !== undefined) where['acknowledgment.acknowledged'] = acknowledged === 'true';
 
-      // Calculate pagination
-      const skip = (parseInt(page) - 1) * parseInt(limit);
+      // Build order array
+      const order = [[sortBy, sort.toUpperCase()]];
+
+      // Calculate offset
+      const offset = (parseInt(page) - 1) * parseInt(limit);
 
       // Execute query
-      const [alerts, total] = await Promise.all([
-        Alert.find(filter)
-          .sort(sortObj)
-          .skip(skip)
-          .limit(parseInt(limit))
-          .populate('vehicle', 'plateNumber make model type')
-          .populate('driver', 'firstName lastName email')
-          .populate('trip', 'tripNumber purpose')
-          .populate('user', 'firstName lastName email')
-          .populate('acknowledgment.acknowledgedBy', 'firstName lastName email')
-          .populate('resolution.resolvedBy', 'firstName lastName email'),
-        Alert.countDocuments(filter)
-      ]);
+      const { count, rows: alerts } = await Alert.findAndCountAll({
+        where,
+        order,
+        offset,
+        limit: parseInt(limit),
+        include: [
+          { model: Vehicle, as: 'vehicle', attributes: ['plateNumber', 'make', 'model', 'type'] },
+          { model: Driver, as: 'driver', attributes: ['firstName', 'lastName', 'email'] },
+          { model: Trip, as: 'trip', attributes: ['tripNumber', 'purpose'] },
+          { model: User, as: 'user', attributes: ['firstName', 'lastName', 'email'] },
+          { model: User, as: 'acknowledgedBy', attributes: ['firstName', 'lastName', 'email'] },
+          { model: User, as: 'resolvedBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       // Calculate pagination info
-      const totalPages = Math.ceil(total / parseInt(limit));
+      const totalPages = Math.ceil(count / parseInt(limit));
       const hasNextPage = parseInt(page) < totalPages;
       const hasPrevPage = parseInt(page) > 1;
 
@@ -75,7 +76,7 @@ router.get('/',
           pagination: {
             currentPage: parseInt(page),
             totalPages,
-            totalAlerts: total,
+            totalAlerts: count,
             hasNextPage,
             hasPrevPage,
             limit: parseInt(limit)
@@ -100,19 +101,23 @@ router.get('/active',
   authenticate,
   async (req, res) => {
     try {
-      let filter = { status: 'active' };
-      
+      let where = { status: 'active' };
+
       // Role-based filtering
       if (req.user.role === 'driver') {
-        filter.driver = req.user._id;
+        where.driverId = req.user.id;
       }
 
-      const alerts = await Alert.find(filter)
-        .populate('vehicle', 'plateNumber make model')
-        .populate('driver', 'firstName lastName')
-        .populate('trip', 'tripNumber purpose')
-        .sort({ severity: -1, createdAt: -1 })
-        .limit(50);
+      const alerts = await Alert.findAll({
+        where,
+        include: [
+          { model: Vehicle, as: 'vehicle', attributes: ['plateNumber', 'make', 'model'] },
+          { model: Driver, as: 'driver', attributes: ['firstName', 'lastName'] },
+          { model: Trip, as: 'trip', attributes: ['tripNumber', 'purpose'] },
+        ],
+        order: [['severity', 'DESC'], ['createdAt', 'DESC']],
+        limit: 50
+      });
 
       res.json({
         success: true,
@@ -129,35 +134,6 @@ router.get('/active',
   }
 );
 
-// @route   GET /api/alerts/unacknowledged
-// @desc    Get unacknowledged alerts
-// @access  Private (Admin, Dispatcher)
-router.get('/unacknowledged',
-  authenticate,
-  authorize('admin', 'dispatcher'),
-  async (req, res) => {
-    try {
-      const alerts = await Alert.findUnacknowledged()
-        .populate('vehicle', 'plateNumber make model')
-        .populate('driver', 'firstName lastName')
-        .populate('trip', 'tripNumber purpose')
-        .limit(100);
-
-      res.json({
-        success: true,
-        data: { alerts }
-      });
-
-    } catch (error) {
-      console.error('Get unacknowledged alerts error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching unacknowledged alerts'
-      });
-    }
-  }
-);
-
 // @route   GET /api/alerts/:id
 // @desc    Get alert by ID
 // @access  Private (Admin, Dispatcher, or related driver)
@@ -167,16 +143,16 @@ router.get('/:id',
     try {
       const { id } = req.params;
 
-      const alert = await Alert.findById(id)
-        .populate('vehicle', 'plateNumber make model type status')
-        .populate('driver', 'firstName lastName email phone')
-        .populate('trip', 'tripNumber purpose route')
-        .populate('user', 'firstName lastName email')
-        .populate('acknowledgment.acknowledgedBy', 'firstName lastName email')
-        .populate('resolution.resolvedBy', 'firstName lastName email')
-        .populate('escalatedTo', 'firstName lastName email')
-        .populate('relatedAlerts')
-        .populate('parentAlert');
+      const alert = await Alert.findByPk(id, {
+        include: [
+          { model: Vehicle, as: 'vehicle', attributes: ['plateNumber', 'make', 'model', 'type', 'status'] },
+          { model: Driver, as: 'driver', attributes: ['firstName', 'lastName', 'email', 'phone'] },
+          { model: Trip, as: 'trip', attributes: ['tripNumber', 'purpose', 'route'] },
+          { model: User, as: 'user', attributes: ['firstName', 'lastName', 'email'] },
+          { model: User, as: 'acknowledgedBy', attributes: ['firstName', 'lastName', 'email'] },
+          { model: User, as: 'resolvedBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       if (!alert) {
         return res.status(404).json({
@@ -186,7 +162,7 @@ router.get('/:id',
       }
 
       // Check permissions
-      if (req.user.role === 'driver' && alert.driver && alert.driver._id.toString() !== req.user._id.toString()) {
+      if (req.user.role === 'driver' && alert.driverId && alert.driverId.toString() !== req.user.id.toString()) {
         return res.status(403).json({
           success: false,
           message: 'Access denied. You can only view your own alerts.'
@@ -218,12 +194,12 @@ router.post('/',
     try {
       const alertData = {
         ...req.body,
-        createdBy: req.user._id
+        createdById: req.user.id
       };
 
       // Validate related entities if provided
-      if (alertData.vehicle) {
-        const vehicle = await Vehicle.findById(alertData.vehicle);
+      if (alertData.vehicleId) {
+        const vehicle = await Vehicle.findByPk(alertData.vehicleId);
         if (!vehicle) {
           return res.status(404).json({
             success: false,
@@ -232,8 +208,8 @@ router.post('/',
         }
       }
 
-      if (alertData.driver) {
-        const driver = await Driver.findById(alertData.driver);
+      if (alertData.driverId) {
+        const driver = await Driver.findByPk(alertData.driverId);
         if (!driver) {
           return res.status(404).json({
             success: false,
@@ -242,8 +218,8 @@ router.post('/',
         }
       }
 
-      if (alertData.trip) {
-        const trip = await Trip.findById(alertData.trip);
+      if (alertData.tripId) {
+        const trip = await Trip.findByPk(alertData.tripId);
         if (!trip) {
           return res.status(404).json({
             success: false,
@@ -252,14 +228,16 @@ router.post('/',
         }
       }
 
-      const alert = new Alert(alertData);
-      await alert.save();
+      const alert = await Alert.create(alertData);
 
-      const populatedAlert = await Alert.findById(alert._id)
-        .populate('vehicle', 'plateNumber make model')
-        .populate('driver', 'firstName lastName email')
-        .populate('trip', 'tripNumber purpose')
-        .populate('createdBy', 'firstName lastName email');
+      const populatedAlert = await Alert.findByPk(alert.id, {
+        include: [
+          { model: Vehicle, as: 'vehicle', attributes: ['plateNumber', 'make', 'model'] },
+          { model: Driver, as: 'driver', attributes: ['firstName', 'lastName', 'email'] },
+          { model: Trip, as: 'trip', attributes: ['tripNumber', 'purpose'] },
+          { model: User, as: 'createdBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       res.status(201).json({
         success: true,
@@ -287,7 +265,7 @@ router.put('/:id/acknowledge',
       const { id } = req.params;
       const { note } = req.body;
 
-      const alert = await Alert.findById(id);
+      const alert = await Alert.findByPk(id);
       if (!alert) {
         return res.status(404).json({
           success: false,
@@ -296,21 +274,29 @@ router.put('/:id/acknowledge',
       }
 
       // Check permissions
-      if (req.user.role === 'driver' && alert.driver && alert.driver.toString() !== req.user._id.toString()) {
+      if (req.user.role === 'driver' && alert.driverId && alert.driverId.toString() !== req.user.id.toString()) {
         return res.status(403).json({
           success: false,
           message: 'Access denied.'
         });
       }
 
-      if (alert.acknowledgment.acknowledged) {
+      if (alert.acknowledgment && alert.acknowledgment.acknowledged) {
         return res.status(400).json({
           success: false,
           message: 'Alert is already acknowledged'
         });
       }
 
-      await alert.acknowledge(req.user._id, note);
+      await alert.update({
+        acknowledgment: {
+          acknowledged: true,
+          acknowledgedById: req.user.id,
+          acknowledgedAt: new Date(),
+          acknowledgmentNote: note
+        },
+        status: 'acknowledged'
+      });
 
       res.json({
         success: true,
@@ -338,7 +324,7 @@ router.put('/:id/resolve',
       const { id } = req.params;
       const { note, action = 'no-action' } = req.body;
 
-      const alert = await Alert.findById(id);
+      const alert = await Alert.findByPk(id);
       if (!alert) {
         return res.status(404).json({
           success: false,
@@ -346,14 +332,23 @@ router.put('/:id/resolve',
         });
       }
 
-      if (alert.resolution.resolved) {
+      if (alert.resolution && alert.resolution.resolved) {
         return res.status(400).json({
           success: false,
           message: 'Alert is already resolved'
         });
       }
 
-      await alert.resolve(req.user._id, note, action);
+      await alert.update({
+        resolution: {
+          resolved: true,
+          resolvedById: req.user.id,
+          resolvedAt: new Date(),
+          resolutionNote: note,
+          resolutionAction: action
+        },
+        status: 'resolved'
+      });
 
       res.json({
         success: true,
@@ -380,7 +375,7 @@ router.put('/:id/dismiss',
     try {
       const { id } = req.params;
 
-      const alert = await Alert.findById(id);
+      const alert = await Alert.findByPk(id);
       if (!alert) {
         return res.status(404).json({
           success: false,
@@ -388,7 +383,7 @@ router.put('/:id/dismiss',
         });
       }
 
-      await alert.dismiss(req.user._id);
+      await alert.update({ status: 'dismissed' });
 
       res.json({
         success: true,
@@ -400,147 +395,6 @@ router.put('/:id/dismiss',
       res.status(500).json({
         success: false,
         message: 'Error dismissing alert'
-      });
-    }
-  }
-);
-
-// @route   GET /api/alerts/vehicle/:vehicleId
-// @desc    Get alerts for a specific vehicle
-// @access  Private (Admin, Dispatcher, or assigned driver)
-router.get('/vehicle/:vehicleId',
-  authenticate,
-  async (req, res) => {
-    try {
-      const { vehicleId } = req.params;
-      const { status } = req.query;
-
-      // Check permissions for drivers
-      if (req.user.role === 'driver') {
-        const vehicle = await Vehicle.findById(vehicleId);
-        if (!vehicle || vehicle.assignedDriver?.toString() !== req.user._id.toString()) {
-          return res.status(403).json({
-            success: false,
-            message: 'Access denied. You can only view alerts for your assigned vehicle.'
-          });
-        }
-      }
-
-      const alerts = await Alert.findByVehicle(vehicleId, status)
-        .populate('driver', 'firstName lastName')
-        .populate('trip', 'tripNumber purpose');
-
-      res.json({
-        success: true,
-        data: { alerts }
-      });
-
-    } catch (error) {
-      console.error('Get vehicle alerts error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching vehicle alerts'
-      });
-    }
-  }
-);
-
-// @route   GET /api/alerts/driver/:driverId
-// @desc    Get alerts for a specific driver
-// @access  Private (Admin, Dispatcher, or own alerts)
-router.get('/driver/:driverId',
-  authenticate,
-  async (req, res) => {
-    try {
-      const { driverId } = req.params;
-      const { status } = req.query;
-
-      // Check permissions
-      if (req.user.role === 'driver' && driverId !== req.user._id.toString()) {
-        return res.status(403).json({
-          success: false,
-          message: 'Access denied. You can only view your own alerts.'
-        });
-      }
-
-      const alerts = await Alert.findByDriver(driverId, status)
-        .populate('vehicle', 'plateNumber make model')
-        .populate('trip', 'tripNumber purpose');
-
-      res.json({
-        success: true,
-        data: { alerts }
-      });
-
-    } catch (error) {
-      console.error('Get driver alerts error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching driver alerts'
-      });
-    }
-  }
-);
-
-// @route   GET /api/alerts/stats/overview
-// @desc    Get alert statistics overview
-// @access  Private (Admin, Dispatcher)
-router.get('/stats/overview',
-  authenticate,
-  authorize('admin', 'dispatcher'),
-  async (req, res) => {
-    try {
-      const { startDate, endDate } = req.query;
-      
-      let matchStage = {};
-      if (startDate || endDate) {
-        matchStage.createdAt = {};
-        if (startDate) matchStage.createdAt.$gte = new Date(startDate);
-        if (endDate) matchStage.createdAt.$lte = new Date(endDate);
-      }
-
-      const stats = await Alert.aggregate([
-        { $match: matchStage },
-        {
-          $group: {
-            _id: null,
-            totalAlerts: { $sum: 1 },
-            activeAlerts: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } },
-            acknowledgedAlerts: { $sum: { $cond: ['$acknowledgment.acknowledged', 1, 0] } },
-            resolvedAlerts: { $sum: { $cond: ['$resolution.resolved', 1, 0] } },
-            criticalAlerts: { $sum: { $cond: [{ $eq: ['$severity', 'critical'] }, 1, 0] } },
-            highAlerts: { $sum: { $cond: [{ $eq: ['$severity', 'high'] }, 1, 0] } },
-            mediumAlerts: { $sum: { $cond: [{ $eq: ['$severity', 'medium'] }, 1, 0] } },
-            lowAlerts: { $sum: { $cond: [{ $eq: ['$severity', 'low'] }, 1, 0] } },
-            avgTimeToAcknowledgment: { $avg: '$timeToAcknowledgment' },
-            avgTimeToResolution: { $avg: '$timeToResolution' }
-          }
-        }
-      ]);
-
-      const overview = stats[0] || {
-        totalAlerts: 0,
-        activeAlerts: 0,
-        acknowledgedAlerts: 0,
-        resolvedAlerts: 0,
-        criticalAlerts: 0,
-        highAlerts: 0,
-        mediumAlerts: 0,
-        lowAlerts: 0,
-        avgTimeToAcknowledgment: 0,
-        avgTimeToResolution: 0
-      };
-
-      res.json({
-        success: true,
-        data: { overview }
-      });
-
-    } catch (error) {
-      console.error('Get alert stats error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching alert statistics'
       });
     }
   }

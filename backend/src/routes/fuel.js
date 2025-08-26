@@ -2,6 +2,7 @@ import express from 'express';
 import { FuelLog, Vehicle, Driver, Trip } from '../models/index.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { fuelValidations, commonValidations } from '../middleware/validation.js';
+import { Op } from 'sequelize';
 
 const router = express.Router();
 
@@ -18,53 +19,53 @@ router.get('/',
         limit = 10,
         sort = 'desc',
         sortBy = 'date',
-        vehicle,
-        driver,
+        vehicleId,
+        driverId,
         startDate,
         endDate,
         fuelType
       } = req.query;
 
       // Build filter object
-      let filter = {};
-      
+      let where = {};
+
       // Role-based filtering
       if (req.user.role === 'driver') {
-        filter.driver = req.user._id;
+        where.driverId = req.user.id;
       }
-      
-      if (vehicle) filter.vehicle = vehicle;
-      if (driver && req.user.role !== 'driver') filter.driver = driver;
-      if (fuelType) filter.fuelType = fuelType;
-      
+
+      if (vehicleId) where.vehicleId = vehicleId;
+      if (driverId && req.user.role !== 'driver') where.driverId = driverId;
+      if (fuelType) where.fuelType = fuelType;
+
       if (startDate || endDate) {
-        filter.date = {};
-        if (startDate) filter.date.$gte = new Date(startDate);
-        if (endDate) filter.date.$lte = new Date(endDate);
+        where.date = {};
+        if (startDate) where.date[Op.gte] = new Date(startDate);
+        if (endDate) where.date[Op.lte] = new Date(endDate);
       }
 
-      // Build sort object
-      const sortOrder = sort === 'desc' ? -1 : 1;
-      const sortObj = { [sortBy]: sortOrder };
+      // Build order array
+      const order = [[sortBy, sort.toUpperCase()]];
 
-      // Calculate pagination
-      const skip = (parseInt(page) - 1) * parseInt(limit);
+      // Calculate offset
+      const offset = (parseInt(page) - 1) * parseInt(limit);
 
       // Execute query
-      const [fuelLogs, total] = await Promise.all([
-        FuelLog.find(filter)
-          .sort(sortObj)
-          .skip(skip)
-          .limit(parseInt(limit))
-          .populate('vehicle', 'plateNumber make model type')
-          .populate('driver', 'firstName lastName email')
-          .populate('trip', 'tripNumber purpose')
-          .populate('createdBy', 'firstName lastName email'),
-        FuelLog.countDocuments(filter)
-      ]);
+      const { count, rows: fuelLogs } = await FuelLog.findAndCountAll({
+        where,
+        order,
+        offset,
+        limit: parseInt(limit),
+        include: [
+          { model: Vehicle, as: 'vehicle', attributes: ['plateNumber', 'make', 'model', 'type'] },
+          { model: Driver, as: 'driver', attributes: ['firstName', 'lastName', 'email'] },
+          { model: Trip, as: 'trip', attributes: ['tripNumber', 'purpose'] },
+          { model: User, as: 'createdBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       // Calculate pagination info
-      const totalPages = Math.ceil(total / parseInt(limit));
+      const totalPages = Math.ceil(count / parseInt(limit));
       const hasNextPage = parseInt(page) < totalPages;
       const hasPrevPage = parseInt(page) > 1;
 
@@ -75,7 +76,7 @@ router.get('/',
           pagination: {
             currentPage: parseInt(page),
             totalPages,
-            totalLogs: total,
+            totalLogs: count,
             hasNextPage,
             hasPrevPage,
             limit: parseInt(limit)
@@ -102,13 +103,16 @@ router.get('/:id',
     try {
       const { id } = req.params;
 
-      const fuelLog = await FuelLog.findById(id)
-        .populate('vehicle', 'plateNumber make model type')
-        .populate('driver', 'firstName lastName email phone')
-        .populate('trip', 'tripNumber purpose route')
-        .populate('createdBy', 'firstName lastName email')
-        .populate('verifiedBy', 'firstName lastName email')
-        .populate('approvedBy', 'firstName lastName email');
+      const fuelLog = await FuelLog.findByPk(id, {
+        include: [
+          { model: Vehicle, as: 'vehicle', attributes: ['plateNumber', 'make', 'model', 'type'] },
+          { model: Driver, as: 'driver', attributes: ['firstName', 'lastName', 'email', 'phone'] },
+          { model: Trip, as: 'trip', attributes: ['tripNumber', 'purpose', 'route'] },
+          { model: User, as: 'createdBy', attributes: ['firstName', 'lastName', 'email'] },
+          { model: User, as: 'verifiedBy', attributes: ['firstName', 'lastName', 'email'] },
+          { model: User, as: 'approvedBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       if (!fuelLog) {
         return res.status(404).json({
@@ -118,7 +122,7 @@ router.get('/:id',
       }
 
       // Check permissions
-      if (req.user.role === 'driver' && fuelLog.driver._id.toString() !== req.user._id.toString()) {
+      if (req.user.role === 'driver' && fuelLog.driverId.toString() !== req.user.id.toString()) {
         return res.status(403).json({
           success: false,
           message: 'Access denied. You can only view your own fuel logs.'
@@ -150,16 +154,16 @@ router.post('/',
     try {
       const fuelData = {
         ...req.body,
-        createdBy: req.user._id
+        createdById: req.user.id
       };
 
       // If driver is creating the log, ensure they can only create for themselves
       if (req.user.role === 'driver') {
-        fuelData.driver = req.user._id;
+        fuelData.driverId = req.user.id;
       }
 
       // Validate vehicle exists
-      const vehicle = await Vehicle.findById(fuelData.vehicle);
+      const vehicle = await Vehicle.findByPk(fuelData.vehicleId);
       if (!vehicle) {
         return res.status(404).json({
           success: false,
@@ -168,7 +172,7 @@ router.post('/',
       }
 
       // Validate driver exists
-      const driver = await Driver.findById(fuelData.driver);
+      const driver = await Driver.findByPk(fuelData.driverId);
       if (!driver) {
         return res.status(404).json({
           success: false,
@@ -177,8 +181,8 @@ router.post('/',
       }
 
       // Validate trip if provided
-      if (fuelData.trip) {
-        const trip = await Trip.findById(fuelData.trip);
+      if (fuelData.tripId) {
+        const trip = await Trip.findByPk(fuelData.tripId);
         if (!trip) {
           return res.status(404).json({
             success: false,
@@ -187,7 +191,7 @@ router.post('/',
         }
 
         // Ensure trip belongs to the same vehicle and driver
-        if (trip.vehicle.toString() !== fuelData.vehicle || trip.driver.toString() !== fuelData.driver) {
+        if (trip.vehicleId.toString() !== fuelData.vehicleId || trip.driverId.toString() !== fuelData.driverId) {
           return res.status(400).json({
             success: false,
             message: 'Trip does not match the specified vehicle and driver'
@@ -195,14 +199,16 @@ router.post('/',
         }
       }
 
-      const fuelLog = new FuelLog(fuelData);
-      await fuelLog.save();
+      const fuelLog = await FuelLog.create(fuelData);
 
-      const populatedFuelLog = await FuelLog.findById(fuelLog._id)
-        .populate('vehicle', 'plateNumber make model')
-        .populate('driver', 'firstName lastName email')
-        .populate('trip', 'tripNumber purpose')
-        .populate('createdBy', 'firstName lastName email');
+      const populatedFuelLog = await FuelLog.findByPk(fuelLog.id, {
+        include: [
+          { model: Vehicle, as: 'vehicle', attributes: ['plateNumber', 'make', 'model'] },
+          { model: Driver, as: 'driver', attributes: ['firstName', 'lastName', 'email'] },
+          { model: Trip, as: 'trip', attributes: ['tripNumber', 'purpose'] },
+          { model: User, as: 'createdBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       res.status(201).json({
         success: true,
@@ -230,7 +236,7 @@ router.put('/:id',
       const { id } = req.params;
       const updates = req.body;
 
-      const fuelLog = await FuelLog.findById(id);
+      const fuelLog = await FuelLog.findByPk(id);
       if (!fuelLog) {
         return res.status(404).json({
           success: false,
@@ -239,7 +245,7 @@ router.put('/:id',
       }
 
       // Check permissions
-      const isCreator = fuelLog.createdBy.toString() === req.user._id.toString();
+      const isCreator = fuelLog.createdById.toString() === req.user.id.toString();
       const isAuthorized = ['admin', 'dispatcher'].includes(req.user.role) || isCreator;
 
       if (!isAuthorized) {
@@ -257,16 +263,17 @@ router.put('/:id',
         });
       }
 
-      updates.updatedBy = req.user._id;
-      const updatedFuelLog = await FuelLog.findByIdAndUpdate(
-        id,
-        updates,
-        { new: true, runValidators: true }
-      )
-        .populate('vehicle', 'plateNumber make model')
-        .populate('driver', 'firstName lastName email')
-        .populate('trip', 'tripNumber purpose')
-        .populate('updatedBy', 'firstName lastName email');
+      updates.updatedById = req.user.id;
+      await fuelLog.update(updates);
+
+      const updatedFuelLog = await FuelLog.findByPk(id, {
+        include: [
+          { model: Vehicle, as: 'vehicle', attributes: ['plateNumber', 'make', 'model'] },
+          { model: Driver, as: 'driver', attributes: ['firstName', 'lastName', 'email'] },
+          { model: Trip, as: 'trip', attributes: ['tripNumber', 'purpose'] },
+          { model: User, as: 'updatedBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       res.json({
         success: true,
@@ -294,7 +301,7 @@ router.put('/:id/verify',
     try {
       const { id } = req.params;
 
-      const fuelLog = await FuelLog.findById(id);
+      const fuelLog = await FuelLog.findByPk(id);
       if (!fuelLog) {
         return res.status(404).json({
           success: false,
@@ -302,12 +309,12 @@ router.put('/:id/verify',
         });
       }
 
-      fuelLog.verified = true;
-      fuelLog.verifiedBy = req.user._id;
-      fuelLog.verifiedAt = new Date();
-      fuelLog.updatedBy = req.user._id;
-
-      await fuelLog.save();
+      await fuelLog.update({
+        verified: true,
+        verifiedById: req.user.id,
+        verifiedAt: new Date(),
+        updatedById: req.user.id
+      });
 
       res.json({
         success: true,
@@ -335,7 +342,7 @@ router.put('/:id/approve',
       const { id } = req.params;
       const { reimbursementAmount } = req.body;
 
-      const fuelLog = await FuelLog.findById(id);
+      const fuelLog = await FuelLog.findByPk(id);
       if (!fuelLog) {
         return res.status(404).json({
           success: false,
@@ -350,19 +357,23 @@ router.put('/:id/approve',
         });
       }
 
-      fuelLog.approved = true;
-      fuelLog.approvedBy = req.user._id;
-      fuelLog.approvedAt = new Date();
-      
-      if (reimbursementAmount !== undefined) {
-        fuelLog.reimbursement.amount = reimbursementAmount;
-        fuelLog.reimbursement.requested = true;
-        fuelLog.reimbursement.status = 'approved';
-      }
-      
-      fuelLog.updatedBy = req.user._id;
+      const updates = {
+        approved: true,
+        approvedById: req.user.id,
+        approvedAt: new Date(),
+        updatedById: req.user.id
+      };
 
-      await fuelLog.save();
+      if (reimbursementAmount !== undefined) {
+        updates.reimbursement = {
+          ...fuelLog.reimbursement,
+          amount: reimbursementAmount,
+          requested: true,
+          status: 'approved'
+        };
+      }
+
+      await fuelLog.update(updates);
 
       res.json({
         success: true,
@@ -374,92 +385,6 @@ router.put('/:id/approve',
       res.status(500).json({
         success: false,
         message: 'Error approving fuel log'
-      });
-    }
-  }
-);
-
-// @route   GET /api/fuel/vehicle/:vehicleId/efficiency
-// @desc    Get fuel efficiency for a vehicle
-// @access  Private (Admin, Dispatcher)
-router.get('/vehicle/:vehicleId/efficiency',
-  authenticate,
-  authorize('admin', 'dispatcher'),
-  async (req, res) => {
-    try {
-      const { vehicleId } = req.params;
-      const { startDate, endDate } = req.query;
-
-      const efficiency = await FuelLog.getAverageEfficiency(vehicleId, startDate, endDate);
-
-      res.json({
-        success: true,
-        data: { efficiency: efficiency[0] || { avgKpl: 0, avgMpg: 0 } }
-      });
-
-    } catch (error) {
-      console.error('Get fuel efficiency error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching fuel efficiency'
-      });
-    }
-  }
-);
-
-// @route   GET /api/fuel/stats/overview
-// @desc    Get fuel statistics overview
-// @access  Private (Admin, Dispatcher)
-router.get('/stats/overview',
-  authenticate,
-  authorize('admin', 'dispatcher'),
-  async (req, res) => {
-    try {
-      const { startDate, endDate } = req.query;
-      
-      let matchStage = {};
-      if (startDate || endDate) {
-        matchStage.date = {};
-        if (startDate) matchStage.date.$gte = new Date(startDate);
-        if (endDate) matchStage.date.$lte = new Date(endDate);
-      }
-
-      const stats = await FuelLog.aggregate([
-        { $match: matchStage },
-        {
-          $group: {
-            _id: null,
-            totalLogs: { $sum: 1 },
-            totalQuantity: { $sum: '$quantity.amount' },
-            totalCost: { $sum: '$cost.totalAmount' },
-            avgPricePerUnit: { $avg: '$cost.pricePerUnit' },
-            avgEfficiency: { $avg: '$efficiency.kpl' },
-            verifiedLogs: { $sum: { $cond: ['$verified', 1, 0] } },
-            approvedLogs: { $sum: { $cond: ['$approved', 1, 0] } }
-          }
-        }
-      ]);
-
-      const overview = stats[0] || {
-        totalLogs: 0,
-        totalQuantity: 0,
-        totalCost: 0,
-        avgPricePerUnit: 0,
-        avgEfficiency: 0,
-        verifiedLogs: 0,
-        approvedLogs: 0
-      };
-
-      res.json({
-        success: true,
-        data: { overview }
-      });
-
-    } catch (error) {
-      console.error('Get fuel stats error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching fuel statistics'
       });
     }
   }

@@ -22,6 +22,7 @@ import toast from 'react-hot-toast';
 const getNavigationItems = (userRole) => {
   const commonItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Reports', href: '/dashboard/reports', icon: FileText },
   ];
 
   const adminItems = [
@@ -31,7 +32,6 @@ const getNavigationItems = (userRole) => {
     { name: 'Trips', href: '/dashboard/trips', icon: Route },
     { name: 'Fuel', href: '/dashboard/fuel', icon: Fuel },
     { name: 'Maintenance', href: '/dashboard/maintenance', icon: Wrench },
-    { name: 'Reports', href: '/dashboard/reports', icon: FileText },
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },
   ];
 

@@ -9,7 +9,12 @@ const config = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   
   // Database Configuration
-  MONGODB_URI: process.env.MONGODB_URI || 'mongodb://localhost:27017/fleet-management',
+  DB: {
+    host: process.env.DB_HOST || 'localhost',
+    database: process.env.DB_NAME || 'fleet-management',
+    user: process.env.DB_USER || 'user',
+    password: process.env.DB_PASSWORD || 'password',
+  },
   
   // Frontend Configuration
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',

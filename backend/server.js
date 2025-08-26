@@ -9,6 +9,7 @@ import config from './src/config/config.js';
 import connectDB from './src/config/database.js';
 import { initializeDatabase } from './src/models/index.js';
 import apiRoutes from './src/routes/index.js';
+import reportsRoutes from './src/routes/reports.js';
 
 const app = express();
 const PORT = config.PORT;
@@ -70,6 +71,7 @@ app.get('/health', async (req, res) => {
 
 // API Routes
 app.use('/api', apiRoutes);
+app.use('/api/reports', reportsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

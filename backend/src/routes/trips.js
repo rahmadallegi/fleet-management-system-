@@ -3,6 +3,7 @@ import { Trip, Vehicle, Driver } from '../models/index.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { tripValidations, commonValidations } from '../middleware/validation.js';
 import { dbUtils } from '../models/index.js';
+import { Op } from 'sequelize';
 
 const router = express.Router();
 
@@ -20,53 +21,54 @@ router.get('/',
         sort = 'desc',
         sortBy = 'createdAt',
         status,
-        vehicle,
-        driver,
+        vehicleId,
+        driverId,
         startDate,
         endDate
       } = req.query;
 
       // Build filter object
-      let filter = {};
-      
+      let where = {};
+
       // Role-based filtering
       if (req.user.role === 'driver') {
         // Drivers can only see their assigned trips
-        filter.driver = req.user._id;
+        where.driverId = req.user.id;
       }
-      
-      if (status) filter.status = status;
-      if (vehicle) filter.vehicle = vehicle;
-      if (driver && req.user.role !== 'driver') filter.driver = driver;
-      
+
+      if (status) where.status = status;
+      if (vehicleId) where.vehicleId = vehicleId;
+      if (driverId && req.user.role !== 'driver') where.driverId = driverId;
+
       if (startDate || endDate) {
-        filter['schedule.plannedStart'] = {};
-        if (startDate) filter['schedule.plannedStart'].$gte = new Date(startDate);
-        if (endDate) filter['schedule.plannedStart'].$lte = new Date(endDate);
+        where.schedule = { ...where.schedule }; // Ensure schedule object exists
+        where.schedule.plannedStart = {};
+        if (startDate) where.schedule.plannedStart[Op.gte] = new Date(startDate);
+        if (endDate) where.schedule.plannedStart[Op.lte] = new Date(endDate);
       }
 
-      // Build sort object
-      const sortOrder = sort === 'desc' ? -1 : 1;
-      const sortObj = { [sortBy]: sortOrder };
+      // Build order array
+      const order = [[sortBy, sort.toUpperCase()]];
 
-      // Calculate pagination
-      const skip = (parseInt(page) - 1) * parseInt(limit);
+      // Calculate offset
+      const offset = (parseInt(page) - 1) * parseInt(limit);
 
       // Execute query
-      const [trips, total] = await Promise.all([
-        Trip.find(filter)
-          .sort(sortObj)
-          .skip(skip)
-          .limit(parseInt(limit))
-          .populate('vehicle', 'plateNumber make model type')
-          .populate('driver', 'firstName lastName email phone')
-          .populate('createdBy', 'firstName lastName email')
-          .populate('updatedBy', 'firstName lastName email'),
-        Trip.countDocuments(filter)
-      ]);
+      const { count, rows: trips } = await Trip.findAndCountAll({
+        where,
+        order,
+        offset,
+        limit: parseInt(limit),
+        include: [
+          { model: Vehicle, as: 'vehicle', attributes: ['plateNumber', 'make', 'model', 'type'] },
+          { model: Driver, as: 'driver', attributes: ['firstName', 'lastName', 'email', 'phone'] },
+          { model: User, as: 'createdBy', attributes: ['firstName', 'lastName', 'email'] },
+          { model: User, as: 'updatedBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       // Calculate pagination info
-      const totalPages = Math.ceil(total / parseInt(limit));
+      const totalPages = Math.ceil(count / parseInt(limit));
       const hasNextPage = parseInt(page) < totalPages;
       const hasPrevPage = parseInt(page) > 1;
 
@@ -77,7 +79,7 @@ router.get('/',
           pagination: {
             currentPage: parseInt(page),
             totalPages,
-            totalTrips: total,
+            totalTrips: count,
             hasNextPage,
             hasPrevPage,
             limit: parseInt(limit)
@@ -102,17 +104,21 @@ router.get('/active',
   authenticate,
   async (req, res) => {
     try {
-      let filter = { status: 'in-progress' };
-      
+      let where = { status: 'in-progress' };
+
       // Role-based filtering
       if (req.user.role === 'driver') {
-        filter.driver = req.user._id;
+        where.driverId = req.user.id;
       }
 
-      const trips = await Trip.find(filter)
-        .populate('vehicle', 'plateNumber make model type gpsDevice')
-        .populate('driver', 'firstName lastName phone')
-        .sort({ 'schedule.plannedStart': 1 });
+      const trips = await Trip.findAll({
+        where,
+        include: [
+          { model: Vehicle, as: 'vehicle', attributes: ['plateNumber', 'make', 'model', 'type', 'gpsDevice'] },
+          { model: Driver, as: 'driver', attributes: ['firstName', 'lastName', 'phone'] },
+        ],
+        order: [['schedule', 'plannedStart', 'ASC']]
+      });
 
       res.json({
         success: true,
@@ -138,11 +144,14 @@ router.get('/:id',
     try {
       const { id } = req.params;
 
-      const trip = await Trip.findById(id)
-        .populate('vehicle', 'plateNumber make model type status gpsDevice')
-        .populate('driver', 'firstName lastName email phone license')
-        .populate('createdBy', 'firstName lastName email')
-        .populate('updatedBy', 'firstName lastName email');
+      const trip = await Trip.findByPk(id, {
+        include: [
+          { model: Vehicle, as: 'vehicle', attributes: ['plateNumber', 'make', 'model', 'type', 'status', 'gpsDevice'] },
+          { model: Driver, as: 'driver', attributes: ['firstName', 'lastName', 'email', 'phone', 'license'] },
+          { model: User, as: 'createdBy', attributes: ['firstName', 'lastName', 'email'] },
+          { model: User, as: 'updatedBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       if (!trip) {
         return res.status(404).json({
@@ -152,7 +161,7 @@ router.get('/:id',
       }
 
       // Check permissions
-      if (req.user.role === 'driver' && trip.driver._id.toString() !== req.user._id.toString()) {
+      if (req.user.role === 'driver' && trip.driverId.toString() !== req.user.id.toString()) {
         return res.status(403).json({
           success: false,
           message: 'Access denied. You can only view your assigned trips.'
@@ -186,11 +195,11 @@ router.post('/',
       const tripData = {
         ...req.body,
         tripNumber: dbUtils.generateTripNumber(),
-        createdBy: req.user._id
+        createdById: req.user.id
       };
 
       // Validate vehicle exists and is available
-      const vehicle = await Vehicle.findById(tripData.vehicle);
+      const vehicle = await Vehicle.findByPk(tripData.vehicleId);
       if (!vehicle) {
         return res.status(404).json({
           success: false,
@@ -206,7 +215,7 @@ router.post('/',
       }
 
       // Validate driver exists and is available
-      const driver = await Driver.findById(tripData.driver);
+      const driver = await Driver.findByPk(tripData.driverId);
       if (!driver) {
         return res.status(404).json({
           success: false,
@@ -221,50 +230,21 @@ router.post('/',
         });
       }
 
-      // Check for conflicting trips
-      const conflictingTrips = await Trip.find({
-        $or: [
-          { vehicle: tripData.vehicle },
-          { driver: tripData.driver }
-        ],
-        status: { $in: ['planned', 'assigned', 'in-progress'] },
-        $or: [
-          {
-            'schedule.plannedStart': {
-              $lte: new Date(tripData.schedule.plannedEnd)
-            },
-            'schedule.plannedEnd': {
-              $gte: new Date(tripData.schedule.plannedStart)
-            }
-          }
-        ]
-      });
-
-      if (conflictingTrips.length > 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Vehicle or driver has conflicting trip assignments',
-          conflicts: conflictingTrips.map(t => ({
-            tripNumber: t.tripNumber,
-            start: t.schedule.plannedStart,
-            end: t.schedule.plannedEnd
-          }))
-        });
-      }
-
-      const trip = new Trip(tripData);
-      await trip.save();
+      const trip = await Trip.create(tripData);
 
       // Update vehicle and driver availability
       await Promise.all([
-        Vehicle.findByIdAndUpdate(tripData.vehicle, { availability: 'in-use' }),
-        Driver.findByIdAndUpdate(tripData.driver, { availability: 'on-duty' })
+        vehicle.update({ availability: 'in-use' }),
+        driver.update({ availability: 'on-duty' })
       ]);
 
-      const populatedTrip = await Trip.findById(trip._id)
-        .populate('vehicle', 'plateNumber make model type')
-        .populate('driver', 'firstName lastName email phone')
-        .populate('createdBy', 'firstName lastName email');
+      const populatedTrip = await Trip.findByPk(trip.id, {
+        include: [
+          { model: Vehicle, as: 'vehicle', attributes: ['plateNumber', 'make', 'model', 'type'] },
+          { model: Driver, as: 'driver', attributes: ['firstName', 'lastName', 'email', 'phone'] },
+          { model: User, as: 'createdBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       res.status(201).json({
         success: true,
@@ -292,7 +272,7 @@ router.put('/:id',
       const { id } = req.params;
       const updates = req.body;
 
-      const trip = await Trip.findById(id);
+      const trip = await Trip.findByPk(id);
       if (!trip) {
         return res.status(404).json({
           success: false,
@@ -301,7 +281,7 @@ router.put('/:id',
       }
 
       // Check permissions
-      const isAssignedDriver = req.user.role === 'driver' && trip.driver.toString() === req.user._id.toString();
+      const isAssignedDriver = req.user.role === 'driver' && trip.driverId.toString() === req.user.id.toString();
       const isAuthorized = ['admin', 'dispatcher'].includes(req.user.role) || isAssignedDriver;
 
       if (!isAuthorized) {
@@ -316,7 +296,7 @@ router.put('/:id',
         const allowedFields = ['status', 'odometer', 'fuel', 'incidents', 'notes', 'completion'];
         const updateFields = Object.keys(updates);
         const restrictedFields = updateFields.filter(field => !allowedFields.includes(field));
-        
+
         if (restrictedFields.length > 0) {
           return res.status(403).json({
             success: false,
@@ -325,15 +305,16 @@ router.put('/:id',
         }
       }
 
-      updates.updatedBy = req.user._id;
-      const updatedTrip = await Trip.findByIdAndUpdate(
-        id,
-        updates,
-        { new: true, runValidators: true }
-      )
-        .populate('vehicle', 'plateNumber make model type')
-        .populate('driver', 'firstName lastName email phone')
-        .populate('updatedBy', 'firstName lastName email');
+      updates.updatedById = req.user.id;
+      await trip.update(updates);
+
+      const updatedTrip = await Trip.findByPk(id, {
+        include: [
+          { model: Vehicle, as: 'vehicle', attributes: ['plateNumber', 'make', 'model', 'type'] },
+          { model: Driver, as: 'driver', attributes: ['firstName', 'lastName', 'email', 'phone'] },
+          { model: User, as: 'updatedBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       res.json({
         success: true,
@@ -361,7 +342,7 @@ router.put('/:id/start',
       const { id } = req.params;
       const { odometerStart, fuelStart } = req.body;
 
-      const trip = await Trip.findById(id);
+      const trip = await Trip.findByPk(id);
       if (!trip) {
         return res.status(404).json({
           success: false,
@@ -370,7 +351,7 @@ router.put('/:id/start',
       }
 
       // Check permissions
-      const isAssignedDriver = req.user.role === 'driver' && trip.driver.toString() === req.user._id.toString();
+      const isAssignedDriver = req.user.role === 'driver' && trip.driverId.toString() === req.user.id.toString();
       const isAuthorized = ['admin', 'dispatcher'].includes(req.user.role) || isAssignedDriver;
 
       if (!isAuthorized) {
@@ -388,17 +369,20 @@ router.put('/:id/start',
       }
 
       // Update trip status and start details
-      trip.status = 'in-progress';
-      trip.schedule.actualStart = new Date();
-      if (odometerStart) trip.odometer.start = odometerStart;
-      if (fuelStart) trip.fuel.startLevel = fuelStart;
-      trip.updatedBy = req.user._id;
+      await trip.update({
+        status: 'in-progress',
+        schedule: { ...trip.schedule, actualStart: new Date() },
+        odometer: { ...trip.odometer, start: odometerStart },
+        fuel: { ...trip.fuel, startLevel: fuelStart },
+        updatedById: req.user.id
+      });
 
-      await trip.save();
-
-      const updatedTrip = await Trip.findById(id)
-        .populate('vehicle', 'plateNumber make model')
-        .populate('driver', 'firstName lastName');
+      const updatedTrip = await Trip.findByPk(id, {
+        include: [
+          { model: Vehicle, as: 'vehicle', attributes: ['plateNumber', 'make', 'model'] },
+          { model: Driver, as: 'driver', attributes: ['firstName', 'lastName'] },
+        ]
+      });
 
       res.json({
         success: true,
@@ -426,7 +410,7 @@ router.put('/:id/complete',
       const { id } = req.params;
       const { odometerEnd, fuelEnd, completion } = req.body;
 
-      const trip = await Trip.findById(id);
+      const trip = await Trip.findByPk(id);
       if (!trip) {
         return res.status(404).json({
           success: false,
@@ -435,7 +419,7 @@ router.put('/:id/complete',
       }
 
       // Check permissions
-      const isAssignedDriver = req.user.role === 'driver' && trip.driver.toString() === req.user._id.toString();
+      const isAssignedDriver = req.user.role === 'driver' && trip.driverId.toString() === req.user.id.toString();
       const isAuthorized = ['admin', 'dispatcher'].includes(req.user.role) || isAssignedDriver;
 
       if (!isAuthorized) {
@@ -453,24 +437,28 @@ router.put('/:id/complete',
       }
 
       // Update trip completion details
-      trip.status = 'completed';
-      trip.schedule.actualEnd = new Date();
-      if (odometerEnd) trip.odometer.end = odometerEnd;
-      if (fuelEnd) trip.fuel.endLevel = fuelEnd;
-      if (completion) trip.completion = { ...trip.completion, ...completion };
-      trip.updatedBy = req.user._id;
-
-      await trip.save();
+      await trip.update({
+        status: 'completed',
+        schedule: { ...trip.schedule, actualEnd: new Date() },
+        odometer: { ...trip.odometer, end: odometerEnd },
+        fuel: { ...trip.fuel, endLevel: fuelEnd },
+        completion: { ...trip.completion, ...completion },
+        updatedById: req.user.id
+      });
 
       // Update vehicle and driver availability
-      await Promise.all([
-        Vehicle.findByIdAndUpdate(trip.vehicle, { availability: 'available' }),
-        Driver.findByIdAndUpdate(trip.driver, { availability: 'available' })
-      ]);
+      const vehicle = await Vehicle.findByPk(trip.vehicleId);
+      if (vehicle) await vehicle.update({ availability: 'available' });
 
-      const updatedTrip = await Trip.findById(id)
-        .populate('vehicle', 'plateNumber make model')
-        .populate('driver', 'firstName lastName');
+      const driver = await Driver.findByPk(trip.driverId);
+      if (driver) await driver.update({ availability: 'available' });
+
+      const updatedTrip = await Trip.findByPk(id, {
+        include: [
+          { model: Vehicle, as: 'vehicle', attributes: ['plateNumber', 'make', 'model'] },
+          { model: Driver, as: 'driver', attributes: ['firstName', 'lastName'] },
+        ]
+      });
 
       res.json({
         success: true,
@@ -499,7 +487,7 @@ router.put('/:id/cancel',
       const { id } = req.params;
       const { reason } = req.body;
 
-      const trip = await Trip.findById(id);
+      const trip = await Trip.findByPk(id);
       if (!trip) {
         return res.status(404).json({
           success: false,
@@ -515,17 +503,18 @@ router.put('/:id/cancel',
       }
 
       // Update trip status
-      trip.status = 'cancelled';
-      trip.notes = (trip.notes || '') + `\nCancelled: ${reason || 'No reason provided'}`;
-      trip.updatedBy = req.user._id;
-
-      await trip.save();
+      await trip.update({
+        status: 'cancelled',
+        notes: (trip.notes || '') + `\nCancelled: ${reason || 'No reason provided'}`, // Corrected escaping for newline
+        updatedById: req.user.id
+      });
 
       // Update vehicle and driver availability
-      await Promise.all([
-        Vehicle.findByIdAndUpdate(trip.vehicle, { availability: 'available' }),
-        Driver.findByIdAndUpdate(trip.driver, { availability: 'available' })
-      ]);
+      const vehicle = await Vehicle.findByPk(trip.vehicleId);
+      if (vehicle) await vehicle.update({ availability: 'available' });
+
+      const driver = await Driver.findByPk(trip.driverId);
+      if (driver) await driver.update({ availability: 'available' });
 
       res.json({
         success: true,
@@ -537,66 +526,6 @@ router.put('/:id/cancel',
       res.status(500).json({
         success: false,
         message: 'Error cancelling trip'
-      });
-    }
-  }
-);
-
-// @route   GET /api/trips/stats/overview
-// @desc    Get trip statistics overview
-// @access  Private (Admin, Dispatcher)
-router.get('/stats/overview',
-  authenticate,
-  authorize('admin', 'dispatcher'),
-  async (req, res) => {
-    try {
-      const { startDate, endDate } = req.query;
-      
-      let matchStage = {};
-      if (startDate || endDate) {
-        matchStage['schedule.plannedStart'] = {};
-        if (startDate) matchStage['schedule.plannedStart'].$gte = new Date(startDate);
-        if (endDate) matchStage['schedule.plannedStart'].$lte = new Date(endDate);
-      }
-
-      const stats = await Trip.aggregate([
-        { $match: matchStage },
-        {
-          $group: {
-            _id: null,
-            totalTrips: { $sum: 1 },
-            completedTrips: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
-            activeTrips: { $sum: { $cond: [{ $eq: ['$status', 'in-progress'] }, 1, 0] } },
-            plannedTrips: { $sum: { $cond: [{ $eq: ['$status', 'planned'] }, 1, 0] } },
-            cancelledTrips: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
-            totalDistance: { $sum: '$route.actualDistance.value' },
-            totalCosts: { $sum: '$costs.total' },
-            avgRating: { $avg: '$completion.rating' }
-          }
-        }
-      ]);
-
-      const overview = stats[0] || {
-        totalTrips: 0,
-        completedTrips: 0,
-        activeTrips: 0,
-        plannedTrips: 0,
-        cancelledTrips: 0,
-        totalDistance: 0,
-        totalCosts: 0,
-        avgRating: 0
-      };
-
-      res.json({
-        success: true,
-        data: { overview }
-      });
-
-    } catch (error) {
-      console.error('Get trip stats error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching trip statistics'
       });
     }
   }
