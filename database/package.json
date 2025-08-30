@@ -5,21 +5,21 @@
   "main": "setup.js",
   "scripts": {
     "setup": "node setup.js",
-    "seed": "mongosh < mongodb/seed_data.js",
+  "seed": "echo 'Use SQL scripts in sql/sample_data.sql'",
     "reset": "node setup.js",
     "test-connection": "node -e \"require('./setup.js').setupDatabase().then(() => process.exit(0)).catch(() => process.exit(1))\""
   },
   "keywords": [
     "fleet-management",
     "database",
-    "mongodb",
+  "mssql",
     "sql",
     "seed-data"
   ],
   "author": "Fleet Management Team",
   "license": "MIT",
   "dependencies": {
-    "mongodb": "^6.0.0"
+  "mssql": "^10.0.0"
   },
   "devDependencies": {
     "dotenv": "^16.0.0"

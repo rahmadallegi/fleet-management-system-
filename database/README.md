@@ -56,21 +56,32 @@ database/
 
 ## 🚀 Quick Setup
 
-### MongoDB Setup (Recommended)
 
-1. **Install MongoDB** (if not already installed)
-2. **Run the setup script**:
-   ```bash
-   cd database
-   node setup.js
-   ```
+### MS SQL Setup (Recommended)
 
-3. **Or use MongoDB shell**:
-   ```bash
-   mongosh < mongodb/seed_data.js
-   ```
+1. **Install SQL Server** (if not already installed)
+2. **Create the database and tables**:
+  ```sql
+  CREATE DATABASE fleet_management;
+  USE fleet_management;
+  -- Then run the schema in sql/schema.sql
+  ```
 
-### SQL Setup (Alternative)
+3. **Insert sample data**:
+  ```sql
+  -- Run the sample data script
+  USE fleet_management;
+  -- Then run the data in sql/sample_data.sql
+  ```
+
+4. **Configure environment variables** (optional):
+  - `DB_USER`, `DB_PASSWORD`, `DB_SERVER`, `DB_NAME`
+
+5. **Run the setup script to test connection**:
+  ```bash
+  cd database
+  node setup.js
+  ```
 
 1. **Create database**:
    ```sql
