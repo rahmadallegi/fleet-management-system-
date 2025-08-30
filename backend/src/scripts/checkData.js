@@ -1,23 +1,21 @@
-import mongoose from 'mongoose';
+import sequelize from '../config/sequelize.js';
 import { Vehicle, Driver, Trip, FuelLog, Maintenance, Alert } from '../models/index.js';
 
 const checkData = async () => {
   try {
     console.log('🔌 Connecting to database...');
     
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/fleet-management');
-    }
+    await sequelize.authenticate();
     
     console.log('✅ Database connected');
     
     // Check all collections
-    const vehicleCount = await Vehicle.countDocuments();
-    const driverCount = await Driver.countDocuments();
-    const tripCount = await Trip.countDocuments();
-    const fuelLogCount = await FuelLog.countDocuments();
-    const maintenanceCount = await Maintenance.countDocuments();
-    const alertCount = await Alert.countDocuments();
+    const vehicleCount = await Vehicle.count();
+    const driverCount = await Driver.count();
+    const tripCount = await Trip.count();
+    const fuelLogCount = await FuelLog.count();
+    const maintenanceCount = await Maintenance.count();
+    const alertCount = await Alert.count();
     
     console.log('📊 Database counts:');
     console.log(`  Vehicles: ${vehicleCount}`);
@@ -28,7 +26,7 @@ const checkData = async () => {
     console.log(`  Alerts: ${alertCount}`);
     
     if (vehicleCount > 0) {
-      const vehicles = await Vehicle.find().limit(3);
+      const vehicles = await Vehicle.findAll({ limit: 3 });
       console.log('\n🚗 Sample vehicles:');
       vehicles.forEach(v => {
         console.log(`  - ${v.plateNumber}: ${v.make} ${v.model} (${v.status})`);
@@ -36,7 +34,7 @@ const checkData = async () => {
     }
     
     if (driverCount > 0) {
-      const drivers = await Driver.find().limit(3);
+      const drivers = await Driver.findAll({ limit: 3 });
       console.log('\n👥 Sample drivers:');
       drivers.forEach(d => {
         console.log(`  - ${d.firstName} ${d.lastName}: ${d.email} (${d.status})`);
@@ -52,3 +50,5 @@ const checkData = async () => {
 };
 
 checkData();
+
+

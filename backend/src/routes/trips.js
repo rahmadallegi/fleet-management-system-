@@ -1,5 +1,6 @@
 import express from 'express';
-import { Trip, Vehicle, Driver } from '../models/index.js';
+import models from '../models/index.js';
+const { Trip, Vehicle, Driver, User } = models;
 import { authenticate, authorize } from '../middleware/auth.js';
 import { tripValidations, commonValidations } from '../middleware/validation.js';
 import { dbUtils } from '../models/index.js';

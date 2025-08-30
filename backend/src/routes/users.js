@@ -1,7 +1,9 @@
 import express from 'express';
-import { User } from '../models/index.js';
+import models from '../models/index.js';
+const { User } = models;
 import { authenticate, authorize, authorizeOwnerOrAdmin } from '../middleware/auth.js';
 import { userValidations, commonValidations } from '../middleware/validation.js';
+import { Op } from 'sequelize';
 
 const router = express.Router();
 
@@ -25,41 +27,41 @@ router.get('/',
       } = req.query;
 
       // Build filter object
-      const filter = {};
-      
-      if (role) filter.role = role;
-      if (isActive !== undefined) filter.isActive = isActive === 'true';
-      
+      const where = {};
+
+      if (role) where.role = role;
+      if (isActive !== undefined) where.isActive = isActive === 'true';
+
       if (search) {
-        filter.$or = [
-          { firstName: { $regex: search, $options: 'i' } },
-          { lastName: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } },
-          { employeeId: { $regex: search, $options: 'i' } }
+        where[Op.or] = [
+          { firstName: { [Op.iLike]: `%${search}%` } },
+          { lastName: { [Op.iLike]: `%${search}%` } },
+          { email: { [Op.iLike]: `%${search}%` } },
+          { employeeId: { [Op.iLike]: `%${search}%` } }
         ];
       }
 
-      // Build sort object
-      const sortOrder = sort === 'desc' ? -1 : 1;
-      const sortObj = { [sortBy]: sortOrder };
+      // Build order array
+      const order = [[sortBy, sort.toUpperCase()]];
 
-      // Calculate pagination
-      const skip = (parseInt(page) - 1) * parseInt(limit);
+      // Calculate offset
+      const offset = (parseInt(page) - 1) * parseInt(limit);
 
       // Execute query
-      const [users, total] = await Promise.all([
-        User.find(filter)
-          .select('-password')
-          .sort(sortObj)
-          .skip(skip)
-          .limit(parseInt(limit))
-          .populate('createdBy', 'firstName lastName email')
-          .populate('updatedBy', 'firstName lastName email'),
-        User.countDocuments(filter)
-      ]);
+      const { count, rows: users } = await User.findAndCountAll({
+        where,
+        order,
+        offset,
+        limit: parseInt(limit),
+        attributes: { exclude: ['password'] },
+        include: [
+          { model: User, as: 'createdBy', attributes: ['firstName', 'lastName', 'email'] },
+          { model: User, as: 'updatedBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       // Calculate pagination info
-      const totalPages = Math.ceil(total / parseInt(limit));
+      const totalPages = Math.ceil(count / parseInt(limit));
       const hasNextPage = parseInt(page) < totalPages;
       const hasPrevPage = parseInt(page) > 1;
 
@@ -70,7 +72,7 @@ router.get('/',
           pagination: {
             currentPage: parseInt(page),
             totalPages,
-            totalUsers: total,
+            totalUsers: count,
             hasNextPage,
             hasPrevPage,
             limit: parseInt(limit)
@@ -99,17 +101,20 @@ router.get('/:id',
       const { id } = req.params;
 
       // Check if user can access this profile
-      if (req.user.role !== 'admin' && req.user.role !== 'dispatcher' && req.user._id.toString() !== id) {
+      if (req.user.role !== 'admin' && req.user.role !== 'dispatcher' && req.user.id.toString() !== id) {
         return res.status(403).json({
           success: false,
           message: 'Access denied. You can only view your own profile.'
         });
       }
 
-      const user = await User.findById(id)
-        .select('-password')
-        .populate('createdBy', 'firstName lastName email')
-        .populate('updatedBy', 'firstName lastName email');
+      const user = await User.findByPk(id, {
+        attributes: { exclude: ['password'] },
+        include: [
+          { model: User, as: 'createdBy', attributes: ['firstName', 'lastName', 'email'] },
+          { model: User, as: 'updatedBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       if (!user) {
         return res.status(404).json({
@@ -144,28 +149,7 @@ router.post('/',
     try {
       const { firstName, lastName, email, password, phone, role, department, employeeId } = req.body;
 
-      // Check if user already exists
-      const existingUser = await User.findOne({ email: email.toLowerCase() });
-      if (existingUser) {
-        return res.status(400).json({
-          success: false,
-          message: 'User with this email already exists'
-        });
-      }
-
-      // Check if employee ID is already taken (if provided)
-      if (employeeId) {
-        const existingEmployee = await User.findOne({ employeeId });
-        if (existingEmployee) {
-          return res.status(400).json({
-            success: false,
-            message: 'Employee ID already exists'
-          });
-        }
-      }
-
-      // Create new user
-      const user = new User({
+      const user = await User.create({
         firstName,
         lastName,
         email: email.toLowerCase(),
@@ -174,15 +158,13 @@ router.post('/',
         role,
         department,
         employeeId,
-        createdBy: req.user._id
+        createdById: req.user.id
       });
 
-      await user.save();
-
-      // Remove password from response
-      const userResponse = await User.findById(user._id)
-        .select('-password')
-        .populate('createdBy', 'firstName lastName email');
+      const userResponse = await User.findByPk(user.id, {
+        attributes: { exclude: ['password'] },
+        include: [{ model: User, as: 'createdBy', attributes: ['firstName', 'lastName', 'email'] }]
+      });
 
       res.status(201).json({
         success: true,
@@ -192,9 +174,9 @@ router.post('/',
 
     } catch (error) {
       console.error('Create user error:', error);
-      
-      if (error.code === 11000) {
-        const field = Object.keys(error.keyPattern)[0];
+
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        const field = Object.keys(error.fields)[0];
         return res.status(400).json({
           success: false,
           message: `${field} already exists`
@@ -221,7 +203,7 @@ router.put('/:id',
       const updates = req.body;
 
       // Check permissions
-      const isOwnProfile = req.user._id.toString() === id;
+      const isOwnProfile = req.user.id.toString() === id;
       const isAdmin = req.user.role === 'admin';
 
       if (!isAdmin && !isOwnProfile) {
@@ -236,7 +218,7 @@ router.put('/:id',
         const allowedFields = ['firstName', 'lastName', 'phone', 'preferences'];
         const updateFields = Object.keys(updates);
         const restrictedFields = updateFields.filter(field => !allowedFields.includes(field));
-        
+
         if (restrictedFields.length > 0) {
           return res.status(403).json({
             success: false,
@@ -245,8 +227,7 @@ router.put('/:id',
         }
       }
 
-      // Find user
-      const user = await User.findById(id);
+      const user = await User.findByPk(id);
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -254,39 +235,16 @@ router.put('/:id',
         });
       }
 
-      // Check for email uniqueness if email is being updated
-      if (updates.email && updates.email !== user.email) {
-        const existingUser = await User.findOne({ email: updates.email.toLowerCase() });
-        if (existingUser) {
-          return res.status(400).json({
-            success: false,
-            message: 'Email already exists'
-          });
-        }
-        updates.email = updates.email.toLowerCase();
-      }
+      updates.updatedById = req.user.id;
+      await user.update(updates);
 
-      // Check for employee ID uniqueness if being updated
-      if (updates.employeeId && updates.employeeId !== user.employeeId) {
-        const existingEmployee = await User.findOne({ employeeId: updates.employeeId });
-        if (existingEmployee) {
-          return res.status(400).json({
-            success: false,
-            message: 'Employee ID already exists'
-          });
-        }
-      }
-
-      // Update user
-      updates.updatedBy = req.user._id;
-      const updatedUser = await User.findByIdAndUpdate(
-        id,
-        updates,
-        { new: true, runValidators: true }
-      )
-        .select('-password')
-        .populate('createdBy', 'firstName lastName email')
-        .populate('updatedBy', 'firstName lastName email');
+      const updatedUser = await User.findByPk(id, {
+        attributes: { exclude: ['password'] },
+        include: [
+          { model: User, as: 'createdBy', attributes: ['firstName', 'lastName', 'email'] },
+          { model: User, as: 'updatedBy', attributes: ['firstName', 'lastName', 'email'] },
+        ]
+      });
 
       res.json({
         success: true,
@@ -296,9 +254,9 @@ router.put('/:id',
 
     } catch (error) {
       console.error('Update user error:', error);
-      
-      if (error.code === 11000) {
-        const field = Object.keys(error.keyPattern)[0];
+
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        const field = Object.keys(error.fields)[0];
         return res.status(400).json({
           success: false,
           message: `${field} already exists`
@@ -325,14 +283,14 @@ router.delete('/:id',
       const { id } = req.params;
 
       // Prevent admin from deleting themselves
-      if (req.user._id.toString() === id) {
+      if (req.user.id.toString() === id) {
         return res.status(400).json({
           success: false,
           message: 'You cannot delete your own account'
         });
       }
 
-      const user = await User.findById(id);
+      const user = await User.findByPk(id);
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -341,9 +299,7 @@ router.delete('/:id',
       }
 
       // Soft delete by setting isActive to false
-      user.isActive = false;
-      user.updatedBy = req.user._id;
-      await user.save();
+      await user.update({ isActive: false, updatedById: req.user.id });
 
       res.json({
         success: true,
@@ -371,15 +327,7 @@ router.put('/:id/activate',
     try {
       const { id } = req.params;
 
-      const user = await User.findByIdAndUpdate(
-        id,
-        { 
-          isActive: true,
-          updatedBy: req.user._id
-        },
-        { new: true }
-      ).select('-password');
-
+      const user = await User.findByPk(id);
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -387,10 +335,14 @@ router.put('/:id/activate',
         });
       }
 
+      await user.update({ isActive: true, updatedById: req.user.id });
+
+      const updatedUser = await User.findByPk(id, { attributes: { exclude: ['password'] } });
+
       res.json({
         success: true,
         message: 'User activated successfully',
-        data: { user }
+        data: { user: updatedUser }
       });
 
     } catch (error) {
@@ -414,7 +366,7 @@ router.put('/:id/unlock',
     try {
       const { id } = req.params;
 
-      const user = await User.findById(id);
+      const user = await User.findByPk(id);
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -423,9 +375,7 @@ router.put('/:id/unlock',
       }
 
       // Reset login attempts and unlock
-      await user.resetLoginAttempts();
-      user.updatedBy = req.user._id;
-      await user.save();
+      await user.update({ loginAttempts: 0, lockUntil: null, updatedById: req.user.id });
 
       res.json({
         success: true,
@@ -437,54 +387,6 @@ router.put('/:id/unlock',
       res.status(500).json({
         success: false,
         message: 'Error unlocking user account'
-      });
-    }
-  }
-);
-
-// @route   GET /api/users/stats/overview
-// @desc    Get user statistics overview
-// @access  Private (Admin, Dispatcher)
-router.get('/stats/overview',
-  authenticate,
-  authorize('admin', 'dispatcher'),
-  async (req, res) => {
-    try {
-      const stats = await User.aggregate([
-        {
-          $group: {
-            _id: null,
-            totalUsers: { $sum: 1 },
-            activeUsers: { $sum: { $cond: ['$isActive', 1, 0] } },
-            inactiveUsers: { $sum: { $cond: ['$isActive', 0, 1] } },
-            adminUsers: { $sum: { $cond: [{ $eq: ['$role', 'admin'] }, 1, 0] } },
-            dispatcherUsers: { $sum: { $cond: [{ $eq: ['$role', 'dispatcher'] }, 1, 0] } },
-            driverUsers: { $sum: { $cond: [{ $eq: ['$role', 'driver'] }, 1, 0] } },
-            viewerUsers: { $sum: { $cond: [{ $eq: ['$role', 'viewer'] }, 1, 0] } }
-          }
-        }
-      ]);
-
-      const overview = stats[0] || {
-        totalUsers: 0,
-        activeUsers: 0,
-        inactiveUsers: 0,
-        adminUsers: 0,
-        dispatcherUsers: 0,
-        driverUsers: 0,
-        viewerUsers: 0
-      };
-
-      res.json({
-        success: true,
-        data: { overview }
-      });
-
-    } catch (error) {
-      console.error('Get user stats error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching user statistics'
       });
     }
   }

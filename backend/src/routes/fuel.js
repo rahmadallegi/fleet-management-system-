@@ -1,5 +1,6 @@
 import express from 'express';
-import { FuelLog, Vehicle, Driver, Trip } from '../models/index.js';
+import models from '../models/index.js';
+const { FuelLog, Vehicle, Driver, Trip, User } = models;
 import { authenticate, authorize } from '../middleware/auth.js';
 import { fuelValidations, commonValidations } from '../middleware/validation.js';
 import { Op } from 'sequelize';

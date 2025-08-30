@@ -1,40 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Car, Plus, Search, Filter, MapPin, User, Wrench, Fuel, CheckCircle } from 'lucide-react';
 import { vehiclesAPI } from '../../services/api';
 import VehicleModal from '../../components/VehicleModal';
+import { useApi } from '../../hooks/useApi';
 
 const Vehicles = () => {
-  const [vehicles, setVehicles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showModal, setShowModal] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
 
-  const fetchVehicles = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await vehiclesAPI.getAll({
-        search: searchTerm,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-        limit: 20
-      });
-      setVehicles(response.data?.vehicles || []);
-    } catch (err) {
-      console.error('Error fetching vehicles:', err);
-      setError('Unable to load vehicles. Please check your connection and try again.');
-      setVehicles([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchVehicles();
+  const getVehicles = useCallback(() => {
+    return vehiclesAPI.getAll({
+      search: searchTerm,
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+      limit: 20
+    });
   }, [searchTerm, statusFilter]);
+
+  const {
+    data: vehiclesResponse,
+    loading,
+    error,
+    refetch: refetchVehicles
+  } = useApi(getVehicles, [searchTerm, statusFilter]);
+
+  const vehicles = vehiclesResponse?.data?.vehicles || [];
 
   const handleAddVehicle = () => {
     setSelectedVehicle(null);
@@ -49,24 +41,20 @@ const Vehicles = () => {
   const handleSaveVehicle = async (vehicleData) => {
     try {
       if (selectedVehicle) {
-        // Update existing vehicle
         await vehiclesAPI.update(selectedVehicle._id, vehicleData);
         setSuccessMessage('Vehicle updated successfully!');
       } else {
-        // Create new vehicle
         await vehiclesAPI.create(vehicleData);
         setSuccessMessage('Vehicle added successfully!');
       }
 
-      // Refresh the vehicles list
-      await fetchVehicles();
+      await refetchVehicles();
       setShowModal(false);
 
-      // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
       console.error('Error saving vehicle:', error);
-      throw error; // Re-throw to be handled by the modal
+      throw error;
     }
   };
 
@@ -92,14 +80,6 @@ const Vehicles = () => {
       default: return 'bg-gray-100 text-gray-800';
     }
   };
-
-  const filteredVehicles = vehicles.filter(vehicle => {
-    const matchesSearch = vehicle.plateNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         vehicle.make?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         vehicle.model?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || vehicle.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
 
   return (
     <div className="space-y-6">
@@ -140,7 +120,7 @@ const Vehicles = () => {
             <Car className="h-5 w-5 text-yellow-400" />
             <div className="ml-3">
               <h3 className="text-sm font-medium text-yellow-800">Connection Issue</h3>
-              <p className="text-sm text-yellow-700 mt-1">{error}</p>
+              <p className="text-sm text-yellow-700 mt-1">Unable to load vehicles. Please check your connection and try again.</p>
             </div>
           </div>
         </div>
@@ -189,9 +169,9 @@ const Vehicles = () => {
             </div>
           ))}
         </div>
-      ) : filteredVehicles.length > 0 ? (
+      ) : vehicles.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredVehicles.map((vehicle) => (
+          {vehicles.map((vehicle) => (
             <div key={vehicle._id} className="card p-6 hover:shadow-lg transition-shadow">
               <div className="flex justify-between items-start mb-4">
                 <div>

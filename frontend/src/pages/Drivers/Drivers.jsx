@@ -1,41 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { User, Plus, Search, Filter, Phone, Mail, CheckCircle, Calendar } from 'lucide-react';
 import { driversAPI } from '../../services/api';
 import DriverModal from '../../components/DriverModal';
+import { useApi } from '../../hooks/useApi';
 
 const Drivers = () => {
-  const [drivers, setDrivers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showModal, setShowModal] = useState(false);
   const [selectedDriver, setSelectedDriver] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
 
-  const fetchDrivers = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await driversAPI.getAll({
-        search: searchTerm,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-        limit: 20
-      });
-      setDrivers(response.data?.drivers || []);
-    } catch (err) {
-      console.error('Error fetching drivers:', err);
-      setError('Unable to load drivers. Please check your connection and try again.');
-      setDrivers([]);
-
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchDrivers();
+  const getDrivers = useCallback(() => {
+    return driversAPI.getAll({
+      search: searchTerm,
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+      limit: 20
+    });
   }, [searchTerm, statusFilter]);
+
+  const {
+    data: driversResponse,
+    loading,
+    error,
+    refetch: refetchDrivers
+  } = useApi(getDrivers, [searchTerm, statusFilter]);
+
+  const drivers = driversResponse?.data?.drivers || [];
 
   const handleAddDriver = () => {
     setSelectedDriver(null);
@@ -57,7 +48,7 @@ const Drivers = () => {
         setSuccessMessage('Driver added successfully!');
       }
 
-      await fetchDrivers();
+      await refetchDrivers();
       setShowModal(false);
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
@@ -89,15 +80,6 @@ const Drivers = () => {
       default: return 'bg-gray-100 text-gray-800';
     }
   };
-
-  const filteredDrivers = drivers.filter(driver => {
-    const matchesSearch = driver.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         driver.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         driver.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         driver.employeeId?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || driver.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
 
   return (
     <div className="space-y-6">
@@ -138,7 +120,7 @@ const Drivers = () => {
             <User className="h-5 w-5 text-yellow-400" />
             <div className="ml-3">
               <h3 className="text-sm font-medium text-yellow-800">Connection Issue</h3>
-              <p className="text-sm text-yellow-700 mt-1">{error}</p>
+              <p className="text-sm text-yellow-700 mt-1">Unable to load drivers. Please check your connection and try again.</p>
             </div>
           </div>
         </div>
@@ -187,9 +169,9 @@ const Drivers = () => {
             </div>
           ))}
         </div>
-      ) : filteredDrivers.length > 0 ? (
+      ) : drivers.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredDrivers.map((driver) => (
+          {drivers.map((driver) => (
             <div key={driver._id} className="card p-6 hover:shadow-lg transition-shadow">
               <div className="flex justify-between items-start mb-4">
                 <div>

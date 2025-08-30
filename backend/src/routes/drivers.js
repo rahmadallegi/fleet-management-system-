@@ -1,5 +1,6 @@
 import express from 'express';
-import { Driver, Vehicle } from '../models/index.js';
+import models from '../models/index.js';
+const { Driver, Vehicle, User } = models;
 import { authenticate, authorize } from '../middleware/auth.js';
 import { driverValidations, commonValidations } from '../middleware/validation.js';
 import { Op } from 'sequelize';

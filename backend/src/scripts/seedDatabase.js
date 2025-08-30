@@ -1,22 +1,17 @@
-import mongoose from 'mongoose';
-import Vehicle from '../models/Vehicle.js';
-import Driver from '../models/Driver.js';
-import Trip from '../models/Trip.js';
-import FuelLog from '../models/FuelLog.js';
-import Maintenance from '../models/Maintenance.js';
-import User from '../models/User.js';
+import sequelize from '../config/sequelize.js';
+import { User, Vehicle, Driver, Trip, FuelLog, Maintenance } from '../models/index.js';
 
 const seedDatabase = async () => {
   try {
     console.log('🌱 Starting database seeding...');
 
     // Clear existing data
-    await Vehicle.deleteMany({});
-    await Driver.deleteMany({});
-    await Trip.deleteMany({});
-    await FuelLog.deleteMany({});
-    await Maintenance.deleteMany({});
-    await User.deleteMany({});
+    await Maintenance.destroy({ where: {} });
+    await FuelLog.destroy({ where: {} });
+    await Trip.destroy({ where: {} });
+    await Vehicle.destroy({ where: {} });
+    await Driver.destroy({ where: {} });
+    await User.destroy({ where: {} });
 
     console.log('🗑️ Cleared existing data');
 
@@ -33,7 +28,7 @@ const seedDatabase = async () => {
     console.log('👤 Created admin user');
 
     // Seed Vehicles
-    const vehicles = await Vehicle.insertMany([
+    const vehicles = await Vehicle.bulkCreate([
       {
         plateNumber: 'FL-001',
         make: 'Ford',
@@ -72,7 +67,7 @@ const seedDatabase = async () => {
           provider: 'Fleet Insurance Co',
           expiryDate: new Date('2025-06-30')
         },
-        createdBy: adminUser._id,
+        createdBy: adminUser.id,
         lastMaintenance: new Date('2024-01-15')
       },
       {
@@ -113,7 +108,7 @@ const seedDatabase = async () => {
           provider: 'Fleet Insurance Co',
           expiryDate: new Date('2025-05-15')
         },
-        createdBy: adminUser._id,
+        createdBy: adminUser.id,
         lastMaintenance: new Date('2024-01-10')
       },
       {
@@ -154,7 +149,7 @@ const seedDatabase = async () => {
           provider: 'Fleet Insurance Co',
           expiryDate: new Date('2025-04-20')
         },
-        createdBy: adminUser._id,
+        createdBy: adminUser.id,
         lastMaintenance: new Date('2024-01-20')
       }
     ]);
@@ -162,7 +157,7 @@ const seedDatabase = async () => {
     console.log('🚗 Seeded vehicles');
 
     // Seed Drivers
-    const drivers = await Driver.insertMany([
+    const drivers = await Driver.bulkCreate([
       {
         firstName: 'John',
         lastName: 'Smith',
@@ -201,7 +196,7 @@ const seedDatabase = async () => {
           safetyScore: 95
         },
         hireDate: new Date('2022-01-15'),
-        createdBy: adminUser._id
+        createdBy: adminUser.id
       },
       {
         firstName: 'Sarah',
@@ -241,7 +236,7 @@ const seedDatabase = async () => {
           safetyScore: 98
         },
         hireDate: new Date('2021-08-01'),
-        createdBy: adminUser._id
+        createdBy: adminUser.id
       },
       {
         firstName: 'Mike',
@@ -281,20 +276,20 @@ const seedDatabase = async () => {
           safetyScore: 87
         },
         hireDate: new Date('2023-02-15'),
-        createdBy: adminUser._id
+        createdBy: adminUser.id
       }
     ]);
 
     console.log('👥 Seeded drivers');
 
     // Seed Trips
-    const trips = await Trip.insertMany([
+    const trips = await Trip.bulkCreate([
       {
         tripNumber: 'TRP-001',
         purpose: 'delivery',
         description: 'Deliver office supplies to downtown location',
-        vehicle: vehicles[0]._id,
-        driver: drivers[0]._id,
+        vehicleId: vehicles[0].id,
+        driverId: drivers[0].id,
         status: 'in-progress',
         priority: 'high',
         schedule: {
@@ -313,14 +308,14 @@ const seedDatabase = async () => {
           },
           estimatedDistance: { value: 45, unit: 'km' }
         },
-        createdBy: adminUser._id
+        createdBy: adminUser.id
       },
       {
         tripNumber: 'TRP-002',
         purpose: 'transport',
         description: 'Transport team to client meeting',
-        vehicle: vehicles[1]._id,
-        driver: drivers[1]._id,
+        vehicleId: vehicles[1].id,
+        driverId: drivers[1].id,
         status: 'planned',
         priority: 'normal',
         schedule: {
@@ -338,17 +333,17 @@ const seedDatabase = async () => {
           },
           estimatedDistance: { value: 32, unit: 'km' }
         },
-        createdBy: adminUser._id
+        createdBy: adminUser.id
       }
     ]);
 
     console.log('🚛 Seeded trips');
 
     // Seed Fuel Logs
-    await FuelLog.insertMany([
+    await FuelLog.bulkCreate([
       {
-        vehicle: vehicles[0]._id,
-        driver: drivers[0]._id,
+        vehicleId: vehicles[0].id,
+        driverId: drivers[0].id,
         date: new Date('2024-01-25'),
         time: '14:30',
         fuelType: 'gasoline',
@@ -365,11 +360,11 @@ const seedDatabase = async () => {
         },
         isFillUp: true,
         status: 'approved',
-        createdBy: adminUser._id
+        createdBy: adminUser.id
       },
       {
-        vehicle: vehicles[1]._id,
-        driver: drivers[1]._id,
+        vehicleId: vehicles[1].id,
+        driverId: drivers[1].id,
         date: new Date('2024-01-24'),
         time: '09:15',
         fuelType: 'diesel',
@@ -386,16 +381,16 @@ const seedDatabase = async () => {
         },
         isFillUp: false,
         status: 'pending',
-        createdBy: adminUser._id
+        createdBy: adminUser.id
       }
     ]);
 
     console.log('⛽ Seeded fuel logs');
 
     // Seed Maintenance Records
-    await Maintenance.insertMany([
+    await Maintenance.bulkCreate([
       {
-        vehicle: vehicles[0]._id,
+        vehicleId: vehicles[0].id,
         type: 'oil-change',
         category: 'engine',
         title: 'Oil Change Service',
@@ -417,10 +412,10 @@ const seedDatabase = async () => {
           number: 'WO-001',
           description: 'Regular oil change and filter replacement service'
         },
-        createdBy: adminUser._id
+        createdBy: adminUser.id
       },
       {
-        vehicle: vehicles[1]._id,
+        vehicleId: vehicles[1].id,
         type: 'brake-service',
         category: 'brakes',
         title: 'Brake Pad Replacement',
@@ -443,7 +438,7 @@ const seedDatabase = async () => {
           number: 'WO-002',
           description: 'Replace front brake pads and inspect brake system'
         },
-        createdBy: adminUser._id
+        createdBy: adminUser.id
       }
     ]);
 
