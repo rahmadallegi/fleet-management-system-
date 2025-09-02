@@ -3,7 +3,7 @@ import { body, param, query, validationResult } from 'express-validator';
 // Handle validation errors
 export const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
-  
+
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
@@ -15,7 +15,7 @@ export const handleValidationErrors = (req, res, next) => {
       }))
     });
   }
-  
+
   next();
 };
 
@@ -25,29 +25,29 @@ export const commonValidations = {
     .isEmail()
     .normalizeEmail()
     .withMessage('Please provide a valid email address'),
-    
+
   password: body('password')
     .isLength({ min: 6 })
     .withMessage('Password must be at least 6 characters long')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
     .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
-    
+
   phone: body('phone')
     .optional()
     .matches(/^\+?[\d\s-()]+$/)
     .withMessage('Please provide a valid phone number'),
-    
+
   name: (field) => body(field)
     .trim()
     .isLength({ min: 2, max: 50 })
     .withMessage(`${field} must be between 2 and 50 characters`)
     .matches(/^[a-zA-Z\s]+$/)
     .withMessage(`${field} must contain only letters and spaces`),
-    
+
   objectId: (field) => param(field)
-    .isMongoId()
-    .withMessage(`Invalid ${field} format`),
-    
+    .isInt({ min: 1 })
+    .withMessage(`Invalid ${field} format. Must be a positive integer.`),
+
   pagination: [
     query('page')
       .optional()
@@ -59,8 +59,8 @@ export const commonValidations = {
       .withMessage('Limit must be between 1 and 100'),
     query('sort')
       .optional()
-      .isIn(['asc', 'desc', '1', '-1'])
-      .withMessage('Sort must be asc, desc, 1, or -1'),
+      .isIn(['asc', 'desc'])
+      .withMessage('Sort must be asc or desc'),
     query('sortBy')
       .optional()
       .isLength({ min: 1, max: 50 })
@@ -82,7 +82,7 @@ export const authValidations = {
       .withMessage('Invalid role specified'),
     handleValidationErrors
   ],
-  
+
   login: [
     commonValidations.email,
     body('password')
@@ -90,7 +90,7 @@ export const authValidations = {
       .withMessage('Password is required'),
     handleValidationErrors
   ],
-  
+
   changePassword: [
     body('currentPassword')
       .notEmpty()
@@ -105,12 +105,12 @@ export const authValidations = {
       }),
     handleValidationErrors
   ],
-  
+
   forgotPassword: [
     commonValidations.email,
     handleValidationErrors
   ],
-  
+
   resetPassword: [
     body('token')
       .notEmpty()
@@ -150,7 +150,7 @@ export const userValidations = {
       .withMessage('Employee ID must be between 3 and 50 characters'),
     handleValidationErrors
   ],
-  
+
   update: [
     commonValidations.objectId('id'),
     commonValidations.name('firstName').optional(),
@@ -167,7 +167,7 @@ export const userValidations = {
       .withMessage('isActive must be a boolean'),
     handleValidationErrors
   ],
-  
+
   getById: [
     commonValidations.objectId('id'),
     handleValidationErrors
@@ -206,7 +206,7 @@ export const vehicleValidations = {
       .withMessage('Invalid vehicle status'),
     handleValidationErrors
   ],
-  
+
   update: [
     commonValidations.objectId('id'),
     body('plateNumber')
@@ -247,14 +247,14 @@ export const driverValidations = {
       .trim()
       .isLength({ min: 3, max: 50 })
       .withMessage('Employee ID must be between 3 and 50 characters'),
-    body('license.number')
+    body('licenseNumber')
       .trim()
       .isLength({ min: 5, max: 50 })
       .withMessage('License number must be between 5 and 50 characters'),
-    body('license.class')
+    body('licenseClass')
       .isIn(['A', 'B', 'C', 'CDL-A', 'CDL-B', 'CDL-C', 'M', 'other'])
       .withMessage('Invalid license class'),
-    body('license.expiryDate')
+    body('licenseExpiryDate')
       .isISO8601()
       .withMessage('Please provide a valid license expiry date')
       .custom((value) => {
@@ -270,31 +270,31 @@ export const driverValidations = {
 // Trip validation rules
 export const tripValidations = {
   create: [
-    body('vehicle')
-      .isMongoId()
+    body('vehicleId')
+      .isInt({ min: 1 })
       .withMessage('Invalid vehicle ID'),
-    body('driver')
-      .isMongoId()
+    body('driverId')
+      .isInt({ min: 1 })
       .withMessage('Invalid driver ID'),
     body('purpose')
       .isIn(['delivery', 'pickup', 'service', 'transport', 'maintenance', 'emergency', 'other'])
       .withMessage('Invalid trip purpose'),
-    body('route.origin.address')
+    body('originAddress')
       .trim()
       .isLength({ min: 5, max: 200 })
       .withMessage('Origin address must be between 5 and 200 characters'),
-    body('route.destination.address')
+    body('destinationAddress')
       .trim()
       .isLength({ min: 5, max: 200 })
       .withMessage('Destination address must be between 5 and 200 characters'),
-    body('schedule.plannedStart')
+    body('plannedStart')
       .isISO8601()
       .withMessage('Please provide a valid planned start time'),
-    body('schedule.plannedEnd')
+    body('plannedEnd')
       .isISO8601()
       .withMessage('Please provide a valid planned end time')
       .custom((value, { req }) => {
-        if (new Date(value) <= new Date(req.body.schedule.plannedStart)) {
+        if (new Date(value) <= new Date(req.body.plannedStart)) {
           throw new Error('Planned end time must be after planned start time');
         }
         return true;
@@ -306,28 +306,28 @@ export const tripValidations = {
 // Fuel log validation rules
 export const fuelValidations = {
   create: [
-    body('vehicle')
-      .isMongoId()
+    body('vehicleId')
+      .isInt({ min: 1 })
       .withMessage('Invalid vehicle ID'),
-    body('driver')
-      .isMongoId()
+    body('driverId')
+      .isInt({ min: 1 })
       .withMessage('Invalid driver ID'),
     body('fuelType')
       .isIn(['gasoline', 'diesel', 'premium', 'lpg', 'cng', 'electric', 'other'])
       .withMessage('Invalid fuel type'),
-    body('quantity.amount')
+    body('quantity')
       .isFloat({ min: 0.1, max: 1000 })
       .withMessage('Fuel quantity must be between 0.1 and 1000'),
-    body('quantity.unit')
+    body('quantityUnit')
       .isIn(['liters', 'gallons', 'kwh'])
       .withMessage('Invalid fuel unit'),
-    body('cost.pricePerUnit')
+    body('pricePerUnit')
       .isFloat({ min: 0.01 })
       .withMessage('Price per unit must be greater than 0'),
-    body('cost.totalAmount')
+    body('totalAmount')
       .isFloat({ min: 0.01 })
       .withMessage('Total amount must be greater than 0'),
-    body('odometer.reading')
+    body('odometerReading')
       .isFloat({ min: 0 })
       .withMessage('Odometer reading cannot be negative'),
     handleValidationErrors
@@ -337,8 +337,8 @@ export const fuelValidations = {
 // Maintenance validation rules
 export const maintenanceValidations = {
   create: [
-    body('vehicle')
-      .isMongoId()
+    body('vehicleId')
+      .isInt({ min: 1 })
       .withMessage('Invalid vehicle ID'),
     body('type')
       .isIn(['scheduled', 'preventive', 'corrective', 'emergency', 'inspection', 'oil-change', 'tire-rotation', 'brake-service', 'engine-service', 'transmission-service', 'electrical', 'bodywork', 'other'])
@@ -349,11 +349,11 @@ export const maintenanceValidations = {
     body('scheduledDate')
       .isISO8601()
       .withMessage('Please provide a valid scheduled date'),
-    body('workOrder.description')
+    body('workDescription')
       .trim()
       .isLength({ min: 10, max: 1000 })
       .withMessage('Work description must be between 10 and 1000 characters'),
-    body('serviceProvider.name')
+    body('serviceProviderName')
       .trim()
       .isLength({ min: 2, max: 100 })
       .withMessage('Service provider name must be between 2 and 100 characters'),

@@ -29,7 +29,7 @@ const Maintenance = () => {
       // Demo data when API is not available
       setMaintenanceRecords([
         {
-          _id: '1',
+          id: '1',
           vehicle: { plateNumber: 'FL-001', make: 'Ford', model: 'Transit' },
           type: 'scheduled',
           category: 'oil-change',
@@ -43,7 +43,7 @@ const Maintenance = () => {
           serviceProvider: 'AutoCare Center'
         },
         {
-          _id: '2',
+          id: '2',
           vehicle: { plateNumber: 'FL-002', make: 'Mercedes', model: 'Sprinter' },
           type: 'repair',
           category: 'brake-system',
@@ -58,7 +58,7 @@ const Maintenance = () => {
           serviceProvider: 'Brake Specialists Inc'
         },
         {
-          _id: '3',
+          id: '3',
           vehicle: { plateNumber: 'FL-003', make: 'Isuzu', model: 'NPR' },
           type: 'inspection',
           category: 'annual-inspection',
@@ -96,7 +96,7 @@ const Maintenance = () => {
   const handleSaveMaintenance = async (maintenanceData) => {
     try {
       if (selectedMaintenance) {
-        await maintenanceAPI.update(selectedMaintenance._id, maintenanceData);
+        await maintenanceAPI.update(selectedMaintenance.id, maintenanceData);
         setSuccessMessage('Maintenance record updated successfully!');
       } else {
         await maintenanceAPI.create(maintenanceData);
@@ -286,7 +286,7 @@ const Maintenance = () => {
       ) : filteredRecords.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredRecords.map((record) => (
-            <div key={record._id} className="card p-6 hover:shadow-lg transition-shadow">
+            <div key={record.id} className="card p-6 hover:shadow-lg transition-shadow">
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">

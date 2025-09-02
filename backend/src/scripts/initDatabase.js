@@ -1,53 +1,49 @@
-import mongoose from 'mongoose';
-import seedDatabase from './seedDatabase.js';
+import sequelize from '../config/sequelize.js';
+import { User, Vehicle, Driver, Trip, FuelLog, Maintenance, Alert } from '../models/index.js';
+import seedDatabase from './seedDatabase.js'; // Make sure this is converted to SQL/Sequelize
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const initDatabase = async () => {
   try {
-    console.log('🔌 Connecting to MongoDB...');
-    
-    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/fleet-management';
-    
-    await mongoose.connect(mongoURI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+    console.log('🔌 Connecting to SQL database...');
+    await sequelize.authenticate();
+    console.log('✅ Connected to SQL database successfully!');
 
-    console.log('✅ Connected to MongoDB successfully!');
-    console.log(`📍 Database: ${mongoURI}`);
+    // Optional: sync models (create tables if they don't exist)
+    // WARNING: { force: true } will DROP tables first
+    await sequelize.sync({ alter: true });
+    console.log('🗄️ Models synced successfully');
 
-    // Test the connection
-    const db = mongoose.connection.db;
-    const admin = db.admin();
-    const info = await admin.serverStatus();
-    
-    console.log(`🗄️ MongoDB Version: ${info.version}`);
-    console.log(`💾 Database Name: ${db.databaseName}`);
+    // Check database status
+    const counts = {
+      users: await User.count(),
+      vehicles: await Vehicle.count(),
+      drivers: await Driver.count(),
+      trips: await Trip.count(),
+      fuelLogs: await FuelLog.count(),
+      maintenance: await Maintenance.count(),
+      alerts: await Alert.count(),
+    };
 
-    // Seed the database with initial data
+    console.log('📊 Current database counts:', counts);
+
+    // Seed database
     console.log('\n🌱 Seeding database with initial data...');
-    await seedDatabase();
+    await seedDatabase(); // Make sure your seedDatabase function is Sequelize-ready
+    console.log('🎉 Database seeding completed successfully!');
 
-    console.log('\n🎉 Database initialization completed successfully!');
     console.log('\n📋 Next steps:');
-    console.log('1. Your database is now ready');
+    console.log('1. Your SQL database is now ready');
     console.log('2. Restart your backend server');
-    console.log('3. Your frontend will now connect to real data');
-    
+    console.log('3. Your frontend will now connect to real SQL data');
+
   } catch (error) {
-    console.error('❌ Database initialization failed:', error.message);
-    
-    if (error.message.includes('ECONNREFUSED')) {
-      console.log('\n🔧 MongoDB Connection Issue:');
-      console.log('1. Make sure MongoDB is installed');
-      console.log('2. Start MongoDB service: net start MongoDB');
-      console.log('3. Or install MongoDB from: https://www.mongodb.com/try/download/community');
-    }
+    console.error('❌ Database initialization failed:', error);
   } finally {
-    await mongoose.disconnect();
-    console.log('🔌 Disconnected from MongoDB');
+    await sequelize.close();
+    console.log('🔌 Disconnected from SQL database');
     process.exit(0);
   }
 };

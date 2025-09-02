@@ -41,7 +41,7 @@ const Drivers = () => {
   const handleSaveDriver = async (driverData) => {
     try {
       if (selectedDriver) {
-        await driversAPI.update(selectedDriver._id, driverData);
+      await driversAPI.update(selectedDriver.id, driverData);
         setSuccessMessage('Driver updated successfully!');
       } else {
         await driversAPI.create(driverData);
@@ -172,7 +172,7 @@ const Drivers = () => {
       ) : drivers.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {drivers.map((driver) => (
-            <div key={driver._id} className="card p-6 hover:shadow-lg transition-shadow">
+            <div key={driver.id} className="card p-6 hover:shadow-lg transition-shadow">
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">

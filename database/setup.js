@@ -1,10 +1,13 @@
 
 // Fleet Management System - MS SQL Database Setup Script
-// This script sets up the MS SQL database connection and verifies connectivity
+// This script connects to the SQL Server and verifies connectivity.
 
-const sql = require('mssql');
+import sql from 'mssql'; // use import (ESM) instead of require
+import dotenv from 'dotenv';
 
-// Database configuration (update with your SQL Server credentials)
+dotenv.config();
+
+// Database configuration (from .env)
 const DB_CONFIG = {
   user: process.env.DB_USER || 'sa',
   password: process.env.DB_PASSWORD || 'yourStrong(!)Password',
@@ -12,31 +15,24 @@ const DB_CONFIG = {
   database: process.env.DB_NAME || 'fleet_management',
   options: {
     encrypt: false, // Set to true if using Azure
-    trustServerCertificate: true
-  }
+    trustServerCertificate: true, // Allow self-signed certs (local dev)
+  },
 };
 
-async function setupDatabase() {
+export const setupDatabase = async () => {
   let pool;
   try {
     console.log('🔌 Connecting to MS SQL Server...');
     pool = await sql.connect(DB_CONFIG);
     console.log(`✅ Connected to database: ${DB_CONFIG.database}`);
 
-    // Optionally, run schema and sample data scripts
-    // You can use sql.query(fs.readFileSync('sql/schema.sql', 'utf8'))
-    // and sql.query(fs.readFileSync('sql/sample_data.sql', 'utf8'))
-    // to initialize the database if needed
+    // Example: Check users table count
+    const result = await pool.request().query('SELECT COUNT(*) as userCount FROM Users');
+    console.log(`👥 Users in DB: ${result.recordset[0].userCount}`);
 
-    // Example: Count users
-    const result = await pool.request().query('SELECT COUNT(*) as userCount FROM users');
-    console.log(`👥 Users: ${result.recordset[0].userCount}`);
-
-    // Add more summary queries as needed
-
-    console.log('🎯 Database connection and summary completed successfully!');
+    console.log('🎯 Database setup & connectivity test completed successfully!');
   } catch (error) {
-    console.error('❌ Database setup failed:', error);
+    console.error('❌ Database setup failed:', error.message);
     process.exit(1);
   } finally {
     if (pool) {
@@ -44,11 +40,9 @@ async function setupDatabase() {
       console.log('🔌 Database connection closed');
     }
   }
-}
+};
 
-// Run setup if called directly
-if (require.main === module) {
+// Run script directly from terminal
+if (import.meta.url === `file://${process.argv[1]}`) {
   setupDatabase();
 }
-
-module.exports = { setupDatabase };

@@ -1,7 +1,7 @@
 import express from 'express';
 import models from '../models/index.js';
 const { User } = models;
-import { authenticate, authorize, authorizeOwnerOrAdmin } from '../middleware/auth.js';
+import { authenticate, authorize } from '../middleware/auth.js';
 import { userValidations, commonValidations } from '../middleware/validation.js';
 import { Op } from 'sequelize';
 
@@ -26,11 +26,14 @@ router.get('/',
         search
       } = req.query;
 
+      const maxLimit = 100; // Prevent huge queries
+      const queryLimit = Math.min(parseInt(limit), maxLimit);
+      const offset = (parseInt(page) - 1) * queryLimit;
+
       // Build filter object
       const where = {};
-
       if (role) where.role = role;
-      if (isActive !== undefined) where.isActive = isActive === 'true';
+      if (isActive !== undefined) where.isActive = isActive.toString() === 'true';
 
       if (search) {
         where[Op.or] = [
@@ -41,18 +44,13 @@ router.get('/',
         ];
       }
 
-      // Build order array
       const order = [[sortBy, sort.toUpperCase()]];
 
-      // Calculate offset
-      const offset = (parseInt(page) - 1) * parseInt(limit);
-
-      // Execute query
       const { count, rows: users } = await User.findAndCountAll({
         where,
         order,
         offset,
-        limit: parseInt(limit),
+        limit: queryLimit,
         attributes: { exclude: ['password'] },
         include: [
           { model: User, as: 'createdBy', attributes: ['firstName', 'lastName', 'email'] },
@@ -60,8 +58,7 @@ router.get('/',
         ]
       });
 
-      // Calculate pagination info
-      const totalPages = Math.ceil(count / parseInt(limit));
+      const totalPages = Math.ceil(count / queryLimit);
       const hasNextPage = parseInt(page) < totalPages;
       const hasPrevPage = parseInt(page) > 1;
 
@@ -75,7 +72,7 @@ router.get('/',
             totalUsers: count,
             hasNextPage,
             hasPrevPage,
-            limit: parseInt(limit)
+            limit: queryLimit
           }
         }
       });
@@ -100,7 +97,6 @@ router.get('/:id',
     try {
       const { id } = req.params;
 
-      // Check if user can access this profile
       if (req.user.role !== 'admin' && req.user.role !== 'dispatcher' && req.user.id.toString() !== id) {
         return res.status(403).json({
           success: false,
@@ -123,17 +119,11 @@ router.get('/:id',
         });
       }
 
-      res.json({
-        success: true,
-        data: { user }
-      });
+      res.json({ success: true, data: { user } });
 
     } catch (error) {
       console.error('Get user error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching user'
-      });
+      res.status(500).json({ success: false, message: 'Error fetching user' });
     }
   }
 );
@@ -183,10 +173,7 @@ router.post('/',
         });
       }
 
-      res.status(500).json({
-        success: false,
-        message: 'Error creating user'
-      });
+      res.status(500).json({ success: false, message: 'Error creating user' });
     }
   }
 );
@@ -202,7 +189,6 @@ router.put('/:id',
       const { id } = req.params;
       const updates = req.body;
 
-      // Check permissions
       const isOwnProfile = req.user.id.toString() === id;
       const isAdmin = req.user.role === 'admin';
 
@@ -213,11 +199,9 @@ router.put('/:id',
         });
       }
 
-      // Restrict fields for non-admin users
       if (!isAdmin) {
         const allowedFields = ['firstName', 'lastName', 'phone', 'preferences'];
-        const updateFields = Object.keys(updates);
-        const restrictedFields = updateFields.filter(field => !allowedFields.includes(field));
+        const restrictedFields = Object.keys(updates).filter(field => !allowedFields.includes(field));
 
         if (restrictedFields.length > 0) {
           return res.status(403).json({
@@ -228,12 +212,7 @@ router.put('/:id',
       }
 
       const user = await User.findByPk(id);
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: 'User not found'
-        });
-      }
+      if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
       updates.updatedById = req.user.id;
       await user.update(updates);
@@ -257,22 +236,16 @@ router.put('/:id',
 
       if (error.name === 'SequelizeUniqueConstraintError') {
         const field = Object.keys(error.fields)[0];
-        return res.status(400).json({
-          success: false,
-          message: `${field} already exists`
-        });
+        return res.status(400).json({ success: false, message: `${field} already exists` });
       }
 
-      res.status(500).json({
-        success: false,
-        message: 'Error updating user'
-      });
+      res.status(500).json({ success: false, message: 'Error updating user' });
     }
   }
 );
 
 // @route   DELETE /api/users/:id
-// @desc    Delete user (soft delete by setting isActive to false)
+// @desc    Soft delete user
 // @access  Private (Admin only)
 router.delete('/:id',
   authenticate,
@@ -281,37 +254,20 @@ router.delete('/:id',
   async (req, res) => {
     try {
       const { id } = req.params;
-
-      // Prevent admin from deleting themselves
       if (req.user.id.toString() === id) {
-        return res.status(400).json({
-          success: false,
-          message: 'You cannot delete your own account'
-        });
+        return res.status(400).json({ success: false, message: 'You cannot delete your own account' });
       }
 
       const user = await User.findByPk(id);
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: 'User not found'
-        });
-      }
+      if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-      // Soft delete by setting isActive to false
       await user.update({ isActive: false, updatedById: req.user.id });
 
-      res.json({
-        success: true,
-        message: 'User deactivated successfully'
-      });
+      res.json({ success: true, message: 'User deactivated successfully' });
 
     } catch (error) {
       console.error('Delete user error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error deleting user'
-      });
+      res.status(500).json({ success: false, message: 'Error deleting user' });
     }
   }
 );
@@ -328,29 +284,17 @@ router.put('/:id/activate',
       const { id } = req.params;
 
       const user = await User.findByPk(id);
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: 'User not found'
-        });
-      }
+      if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
       await user.update({ isActive: true, updatedById: req.user.id });
 
       const updatedUser = await User.findByPk(id, { attributes: { exclude: ['password'] } });
 
-      res.json({
-        success: true,
-        message: 'User activated successfully',
-        data: { user: updatedUser }
-      });
+      res.json({ success: true, message: 'User activated successfully', data: { user: updatedUser } });
 
     } catch (error) {
       console.error('Activate user error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error activating user'
-      });
+      res.status(500).json({ success: false, message: 'Error activating user' });
     }
   }
 );
@@ -367,27 +311,18 @@ router.put('/:id/unlock',
       const { id } = req.params;
 
       const user = await User.findByPk(id);
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: 'User not found'
-        });
+      if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+      // Only update if locked
+      if (user.loginAttempts > 0 || user.lockUntil) {
+        await user.update({ loginAttempts: 0, lockUntil: null, updatedById: req.user.id });
       }
 
-      // Reset login attempts and unlock
-      await user.update({ loginAttempts: 0, lockUntil: null, updatedById: req.user.id });
-
-      res.json({
-        success: true,
-        message: 'User account unlocked successfully'
-      });
+      res.json({ success: true, message: 'User account unlocked successfully' });
 
     } catch (error) {
       console.error('Unlock user error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error unlocking user account'
-      });
+      res.status(500).json({ success: false, message: 'Error unlocking user account' });
     }
   }
 );

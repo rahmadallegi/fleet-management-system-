@@ -1,28 +1,34 @@
-import mongoose from 'mongoose';
-import seedDatabase from './seedDatabase.js';
-import '../config/database.js';
+import sequelize from '../config/sequelize.js';
+import seedDatabase from './seedDatabase.js'; // Make sure this is Sequelize-compatible
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const runSeed = async () => {
   try {
-    console.log('🔌 Connecting to database...');
-    
-    // Wait for database connection
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/fleet-management');
-    }
-    
-    console.log('✅ Database connected');
-    
+    console.log('🔌 Connecting to SQL database...');
+
+    // Authenticate connection
+    await sequelize.authenticate();
+    console.log('✅ Database connected successfully');
+
+    // Optional: ensure tables exist
+    await sequelize.sync({ alter: true });
+    console.log('🗄️ Models synced successfully');
+
     // Run seeding
-    await seedDatabase();
-    
+    console.log('\n🌱 Running database seed...');
+    await seedDatabase(); // Must be updated to use Sequelize models
     console.log('🎉 Seeding completed successfully!');
-    process.exit(0);
-    
+
   } catch (error) {
     console.error('❌ Error running seed:', error);
-    process.exit(1);
+  } finally {
+    await sequelize.close();
+    console.log('🔌 Disconnected from database');
+    process.exit(0);
   }
 };
 
+// Run the seeding script
 runSeed();

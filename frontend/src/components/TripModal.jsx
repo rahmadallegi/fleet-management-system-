@@ -6,8 +6,8 @@ const TripModal = ({ isOpen, onClose, onSave, trip = null }) => {
   const [formData, setFormData] = useState({
     purpose: trip?.purpose || '',
     description: trip?.description || '',
-    vehicle: trip?.vehicle?._id || '',
-    driver: trip?.driver?._id || '',
+  vehicle: trip?.vehicle?.id || '',
+  driver: trip?.driver?.id || '',
     schedule: {
       plannedStart: trip?.schedule?.plannedStart || '',
       plannedEnd: trip?.schedule?.plannedEnd || ''
@@ -53,12 +53,12 @@ const TripModal = ({ isOpen, onClose, onSave, trip = null }) => {
       console.error('Error fetching vehicles and drivers:', error);
       // Set demo data
       setVehicles([
-        { _id: '1', plateNumber: 'FL-001', make: 'Ford', model: 'Transit' },
-        { _id: '2', plateNumber: 'FL-002', make: 'Mercedes', model: 'Sprinter' }
+        { id: '1', plateNumber: 'FL-001', make: 'Ford', model: 'Transit' },
+        { id: '2', plateNumber: 'FL-002', make: 'Mercedes', model: 'Sprinter' }
       ]);
       setDrivers([
-        { _id: '1', firstName: 'John', lastName: 'Smith' },
-        { _id: '2', firstName: 'Sarah', lastName: 'Johnson' }
+        { id: '1', firstName: 'John', lastName: 'Smith' },
+        { id: '2', firstName: 'Sarah', lastName: 'Johnson' }
       ]);
     }
   };
@@ -231,7 +231,7 @@ const TripModal = ({ isOpen, onClose, onSave, trip = null }) => {
                 >
                   <option value="">Select Vehicle</option>
                   {vehicles.map((vehicle) => (
-                    <option key={vehicle._id} value={vehicle._id}>
+                    <option key={vehicle.id} value={vehicle.id}>
                       {vehicle.plateNumber} - {vehicle.make} {vehicle.model}
                     </option>
                   ))}
@@ -255,7 +255,7 @@ const TripModal = ({ isOpen, onClose, onSave, trip = null }) => {
                 >
                   <option value="">Select Driver</option>
                   {drivers.map((driver) => (
-                    <option key={driver._id} value={driver._id}>
+                    <option key={driver.id} value={driver.id}>
                       {driver.firstName} {driver.lastName}
                     </option>
                   ))}

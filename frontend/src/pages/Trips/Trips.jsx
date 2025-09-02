@@ -50,7 +50,7 @@ const Trips = () => {
   const handleSaveTrip = async (tripData) => {
     try {
       if (selectedTrip) {
-        await tripsAPI.update(selectedTrip._id, tripData);
+        await tripsAPI.update(selectedTrip.id, tripData);
         setSuccessMessage('Trip updated successfully!');
       } else {
         await tripsAPI.create(tripData);
@@ -193,7 +193,7 @@ const Trips = () => {
       ) : filteredTrips.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredTrips.map((trip) => (
-            <div key={trip._id} className="card p-6 hover:shadow-lg transition-shadow">
+            <div key={trip.id} className="card p-6 hover:shadow-lg transition-shadow">
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">

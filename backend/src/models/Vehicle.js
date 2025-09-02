@@ -1,85 +1,70 @@
-import { DataTypes } from 'sequelize';
-import sequelize from '../config/sequelize.js';
+import { sql } from '../database/db.js';
 
-const Vehicle = sequelize.define('Vehicle', {
-  plateNumber: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true,
-  },
-  vin: {
-    type: DataTypes.STRING,
-    unique: true,
-  },
-  make: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  model: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  year: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-  },
-  color: {
-    type: DataTypes.STRING,
-  },
-  type: {
-    type: DataTypes.ENUM('car', 'truck', 'van', 'motorcycle', 'bus', 'trailer', 'other'),
-    allowNull: false,
-  },
-  category: {
-    type: DataTypes.ENUM('passenger', 'cargo', 'service', 'emergency', 'construction', 'other'),
-    defaultValue: 'passenger',
-  },
-  engine: {
-    type: DataTypes.JSON,
-  },
-  transmission: {
-    type: DataTypes.ENUM('manual', 'automatic', 'cvt', 'other'),
-    defaultValue: 'manual',
-  },
-  fuelType: {
-    type: DataTypes.ENUM('gasoline', 'diesel', 'electric', 'hybrid', 'lpg', 'cng', 'other'),
-    allowNull: false,
-  },
-  capacity: {
-    type: DataTypes.JSON,
-  },
-  status: {
-    type: DataTypes.ENUM('active', 'inactive', 'maintenance', 'repair', 'retired', 'sold'),
-    defaultValue: 'active',
-  },
-  availability: {
-    type: DataTypes.ENUM('available', 'in-use', 'maintenance', 'out-of-service'),
-    defaultValue: 'available',
-  },
-  purchaseInfo: {
-    type: DataTypes.JSON,
-  },
-  registration: {
-    type: DataTypes.JSON,
-  },
-  insurance: {
-    type: DataTypes.JSON,
-  },
-  odometer: {
-    type: DataTypes.JSON,
-  },
-  gpsDevice: {
-    type: DataTypes.JSON,
-  },
-  documents: {
-    type: DataTypes.JSON,
-  },
-  images: {
-    type: DataTypes.JSON,
-  },
-  notes: {
-    type: DataTypes.TEXT,
-  },
-});
+// Create a new vehicle
+export const createVehicle = async (vehicleData) => {
+  await sql.query`
+    INSERT INTO Vehicles (
+      PlateNumber, VIN, Make, Model, Year, Color, Type, Category,
+      Engine, Transmission, FuelType, Capacity, Status, Availability,
+      PurchaseInfo, Registration, Insurance, Odometer, GPSDevice,
+      Documents, Images, Notes
+    )
+    VALUES (
+      ${vehicleData.plateNumber}, ${vehicleData.vin}, ${vehicleData.make}, ${vehicleData.model},
+      ${vehicleData.year}, ${vehicleData.color}, ${vehicleData.type}, ${vehicleData.category},
+      ${JSON.stringify(vehicleData.engine || {})}, ${vehicleData.transmission}, ${vehicleData.fuelType},
+      ${JSON.stringify(vehicleData.capacity || {})}, ${vehicleData.status}, ${vehicleData.availability},
+      ${JSON.stringify(vehicleData.purchaseInfo || {})}, ${JSON.stringify(vehicleData.registration || {})},
+      ${JSON.stringify(vehicleData.insurance || {})}, ${JSON.stringify(vehicleData.odometer || {})},
+      ${JSON.stringify(vehicleData.gpsDevice || {})}, ${JSON.stringify(vehicleData.documents || {})},
+      ${JSON.stringify(vehicleData.images || {})}, ${vehicleData.notes}
+    )
+  `;
+};
 
-export default Vehicle;
+// Get vehicle by ID
+export const getVehicleById = async (id) => {
+  const result = await sql.query`SELECT * FROM Vehicles WHERE Id = ${id}`;
+  return result.recordset[0];
+};
+
+// Get all vehicles
+export const getAllVehicles = async () => {
+  const result = await sql.query`SELECT * FROM Vehicles`;
+  return result.recordset;
+};
+
+// Update vehicle by ID
+export const updateVehicle = async (id, updates) => {
+  await sql.query`
+    UPDATE Vehicles SET
+      PlateNumber = ${updates.plateNumber},
+      VIN = ${updates.vin},
+      Make = ${updates.make},
+      Model = ${updates.model},
+      Year = ${updates.year},
+      Color = ${updates.color},
+      Type = ${updates.type},
+      Category = ${updates.category},
+      Engine = ${JSON.stringify(updates.engine || {})},
+      Transmission = ${updates.transmission},
+      FuelType = ${updates.fuelType},
+      Capacity = ${JSON.stringify(updates.capacity || {})},
+      Status = ${updates.status},
+      Availability = ${updates.availability},
+      PurchaseInfo = ${JSON.stringify(updates.purchaseInfo || {})},
+      Registration = ${JSON.stringify(updates.registration || {})},
+      Insurance = ${JSON.stringify(updates.insurance || {})},
+      Odometer = ${JSON.stringify(updates.odometer || {})},
+      GPSDevice = ${JSON.stringify(updates.gpsDevice || {})},
+      Documents = ${JSON.stringify(updates.documents || {})},
+      Images = ${JSON.stringify(updates.images || {})},
+      Notes = ${updates.notes}
+    WHERE Id = ${id}
+  `;
+};
+
+// Delete vehicle by ID
+export const deleteVehicle = async (id) => {
+  await sql.query`DELETE FROM Vehicles WHERE Id = ${id}`;
+};

@@ -1,13 +1,23 @@
-import sequelize from './sequelize.js';
+import dotenv from 'dotenv';
+import sql from 'mssql';
 
-const connectDB = async () => {
+dotenv.config();
+
+const config = {
+  connectionString: process.env.SQL_SERVER_CONNECTION_STRING,
+  options: {
+    trustServerCertificate: true // Accept self-signed certs for local dev
+  }
+};
+
+const connectToSqlServer = async () => {
   try {
-    await sequelize.authenticate();
-    console.log('✅ MS SQL Server Connected');
+    await sql.connect(config);
+    console.log('✅ Connected to SQL Server');
   } catch (error) {
-    console.error('❌ Database connection error:', error);
+    console.error('❌ SQL Server connection error:', error);
     throw error;
   }
 };
 
-export default connectDB;
+export { sql, connectToSqlServer };

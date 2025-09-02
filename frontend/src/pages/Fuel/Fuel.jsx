@@ -29,7 +29,7 @@ const Fuel = () => {
       // Demo data when API is not available
       setFuelLogs([
         {
-          _id: '1',
+          id: '1',
           vehicle: { plateNumber: 'FL-001', make: 'Ford', model: 'Transit' },
           driver: { firstName: 'John', lastName: 'Smith' },
           date: '2024-01-25',
@@ -43,7 +43,7 @@ const Fuel = () => {
           status: 'approved'
         },
         {
-          _id: '2',
+          id: '2',
           vehicle: { plateNumber: 'FL-002', make: 'Mercedes', model: 'Sprinter' },
           driver: { firstName: 'Sarah', lastName: 'Johnson' },
           date: '2024-01-24',
@@ -57,7 +57,7 @@ const Fuel = () => {
           status: 'pending'
         },
         {
-          _id: '3',
+          id: '3',
           vehicle: { plateNumber: 'FL-003', make: 'Isuzu', model: 'NPR' },
           driver: { firstName: 'Mike', lastName: 'Wilson' },
           date: '2024-01-23',
@@ -93,7 +93,7 @@ const Fuel = () => {
   const handleSaveFuelLog = async (fuelLogData) => {
     try {
       if (selectedFuelLog) {
-        await fuelAPI.update(selectedFuelLog._id, fuelLogData);
+        await fuelAPI.update(selectedFuelLog.id, fuelLogData);
         setSuccessMessage('Fuel log updated successfully!');
       } else {
         await fuelAPI.create(fuelLogData);
@@ -293,7 +293,7 @@ const Fuel = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredFuelLogs.map((log) => (
-                  <tr key={log._id} className="hover:bg-gray-50">
+                  <tr key={log.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-gray-900">

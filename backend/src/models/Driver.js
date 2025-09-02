@@ -2,6 +2,11 @@ import { DataTypes } from 'sequelize';
 import sequelize from '../config/sequelize.js';
 
 const Driver = sequelize.define('Driver', {
+  id: {
+    type: DataTypes.INTEGER,
+    autoIncrement: true,
+    primaryKey: true,
+  },
   firstName: {
     type: DataTypes.STRING,
     allowNull: false,
@@ -25,15 +30,9 @@ const Driver = sequelize.define('Driver', {
       isEmail: true,
     },
   },
-  phone: {
-    type: DataTypes.JSON,
-  },
-  address: {
-    type: DataTypes.JSON,
-  },
-  emergencyContact: {
-    type: DataTypes.JSON,
-  },
+  phone: DataTypes.JSON,
+  address: DataTypes.JSON,
+  emergencyContact: DataTypes.JSON,
   employeeId: {
     type: DataTypes.STRING,
     allowNull: false,
@@ -43,21 +42,11 @@ const Driver = sequelize.define('Driver', {
     type: DataTypes.DATE,
     allowNull: false,
   },
-  department: {
-    type: DataTypes.STRING,
-  },
-  position: {
-    type: DataTypes.STRING,
-  },
-  salary: {
-    type: DataTypes.JSON,
-  },
-  license: {
-    type: DataTypes.JSON,
-  },
-  medical: {
-    type: DataTypes.JSON,
-  },
+  department: DataTypes.STRING,
+  position: DataTypes.STRING,
+  salary: DataTypes.JSON,
+  license: DataTypes.JSON,
+  medical: DataTypes.JSON,
   status: {
     type: DataTypes.ENUM('active', 'inactive', 'suspended', 'terminated', 'on-leave'),
     defaultValue: 'active',
@@ -66,24 +55,15 @@ const Driver = sequelize.define('Driver', {
     type: DataTypes.ENUM('available', 'on-duty', 'off-duty', 'on-break', 'unavailable'),
     defaultValue: 'available',
   },
-  performance: {
-    type: DataTypes.JSON,
-  },
-  violations: {
-    type: DataTypes.JSON,
-  },
-  training: {
-    type: DataTypes.JSON,
-  },
-  documents: {
-    type: DataTypes.JSON,
-  },
-  avatar: {
-    type: DataTypes.STRING,
-  },
-  notes: {
-    type: DataTypes.TEXT,
-  },
+  performance: DataTypes.JSON,
+  violations: DataTypes.JSON,
+  training: DataTypes.JSON,
+  documents: DataTypes.JSON,
+  avatar: DataTypes.STRING,
+  notes: DataTypes.TEXT,
+}, {
+  timestamps: true,   // adds createdAt & updatedAt
+  tableName: 'drivers'
 });
 
 export default Driver;

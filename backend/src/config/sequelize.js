@@ -1,19 +1,23 @@
-import { Sequelize } from 'sequelize';
-import config from './config.js';
+import dotenv from 'dotenv';
+import sql from 'mssql';
 
-console.log('DB_HOST:', config.DB.host);
-console.log('DB_NAME:', config.DB.database);
-console.log('DB_USER:', config.DB.user);
-console.log('DB_PASSWORD:', config.DB.password);
+dotenv.config();
 
-const sequelize = new Sequelize(config.DB.database, config.DB.user, config.DB.password, {
-  host: config.DB.host,
-  dialect: 'mssql',
-  dialectOptions: {
-    options: {
-      encrypt: true,
-    },
-  },
-});
+const config = {
+  connectionString: process.env.SQL_SERVER_CONNECTION_STRING,
+  options: {
+    trustServerCertificate: true // Accept self-signed certs for local dev
+  }
+};
 
-export default sequelize;
+const connectToSqlServer = async () => {
+  try {
+    await sql.connect(config);
+    console.log('✅ SQL Server connection successful');
+  } catch (err) {
+    console.error('❌ SQL Server connection failed:', err);
+    throw err;
+  }
+};
+
+export { sql, connectToSqlServer };

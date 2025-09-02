@@ -4,7 +4,7 @@ import { vehiclesAPI } from '../services/api';
 
 const MaintenanceModal = ({ isOpen, onClose, onSave, maintenance = null }) => {
   const [formData, setFormData] = useState({
-    vehicle: maintenance?.vehicle?._id || '',
+  vehicle: maintenance?.vehicle?.id || '',
     type: maintenance?.type || 'scheduled',
     category: maintenance?.category || 'oil-change',
     title: maintenance?.title || '',
@@ -39,9 +39,9 @@ const MaintenanceModal = ({ isOpen, onClose, onSave, maintenance = null }) => {
       console.error('Error fetching vehicles:', error);
       // Set demo data
       setVehicles([
-        { _id: '1', plateNumber: 'FL-001', make: 'Ford', model: 'Transit' },
-        { _id: '2', plateNumber: 'FL-002', make: 'Mercedes', model: 'Sprinter' },
-        { _id: '3', plateNumber: 'FL-003', make: 'Isuzu', model: 'NPR' }
+        { id: '1', plateNumber: 'FL-001', make: 'Ford', model: 'Transit' },
+        { id: '2', plateNumber: 'FL-002', make: 'Mercedes', model: 'Sprinter' },
+        { id: '3', plateNumber: 'FL-003', make: 'Isuzu', model: 'NPR' }
       ]);
     }
   };
@@ -175,7 +175,7 @@ const MaintenanceModal = ({ isOpen, onClose, onSave, maintenance = null }) => {
                 >
                   <option value="">Select Vehicle</option>
                   {vehicles.map((vehicle) => (
-                    <option key={vehicle._id} value={vehicle._id}>
+                    <option key={vehicle.id} value={vehicle.id}>
                       {vehicle.plateNumber} - {vehicle.make} {vehicle.model}
                     </option>
                   ))}

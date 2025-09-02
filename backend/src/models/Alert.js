@@ -2,6 +2,11 @@ import { DataTypes } from 'sequelize';
 import sequelize from '../config/sequelize.js';
 
 const Alert = sequelize.define('Alert', {
+  id: {
+    type: DataTypes.INTEGER,
+    autoIncrement: true,
+    primaryKey: true,
+  },
   alertId: {
     type: DataTypes.STRING,
     allowNull: false,
@@ -85,6 +90,9 @@ const Alert = sequelize.define('Alert', {
   relatedAlerts: {
     type: DataTypes.JSON,
   },
+}, {
+  timestamps: true, // adds createdAt, updatedAt
+  tableName: 'alerts', // good SQL naming
 });
 
 export default Alert;

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { usersAPI } from '../../services/api';
 import { Users, Plus, Search, Filter, Edit, Trash2, Shield, UserCheck, UserX, Download } from 'lucide-react';
 import { useToast } from '../../components/Toast/ToastProvider';
 import { exportToCSV } from '../../utils/exportUtils';
@@ -22,48 +23,18 @@ const UserManagement = () => {
   });
 
   useEffect(() => {
-    // Simulate loading users
-    setTimeout(() => {
-      setUsers([
-        {
-          id: '1',
-          name: 'John Admin',
-          email: 'admin@fleet.com',
-          role: 'admin',
-          status: 'active',
-          lastLogin: '2024-01-15T10:30:00Z',
-          createdAt: '2024-01-01T00:00:00Z'
-        },
-        {
-          id: '2', 
-          name: 'Jane User',
-          email: 'jane.user@company.com',
-          role: 'user',
-          status: 'active',
-          lastLogin: '2024-01-14T15:45:00Z',
-          createdAt: '2024-01-05T00:00:00Z'
-        },
-        {
-          id: '3',
-          name: 'Mike Warehouse',
-          email: 'mike.warehouse@company.com', 
-          role: 'warehouse',
-          status: 'active',
-          lastLogin: '2024-01-14T09:15:00Z',
-          createdAt: '2024-01-03T00:00:00Z'
-        },
-        {
-          id: '4',
-          name: 'Sarah Driver',
-          email: 'sarah.driver@company.com',
-          role: 'user', 
-          status: 'inactive',
-          lastLogin: '2024-01-10T14:20:00Z',
-          createdAt: '2024-01-02T00:00:00Z'
-        }
-      ]);
-      setLoading(false);
-    }, 1000);
+    const fetchUsers = async () => {
+      setLoading(true);
+      try {
+        const response = await usersAPI.getAll();
+        setUsers(response.data?.users || []);
+      } catch (err) {
+        error('Failed to load users from backend.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchUsers();
   }, []);
 
   const getRoleColor = (role) => {

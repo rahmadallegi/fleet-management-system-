@@ -31,11 +31,12 @@ const testModels = async () => {
 
     console.log('✅ All models are working correctly!');
 
-    process.exit(0);
-
   } catch (error) {
     console.error('❌ Error testing models:', error);
-    process.exit(1);
+  } finally {
+    await sequelize.close();
+    console.log('🔌 Database connection closed.');
+    process.exit(0);
   }
 };
 

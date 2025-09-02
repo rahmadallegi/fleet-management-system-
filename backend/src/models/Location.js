@@ -1,370 +1,350 @@
-import mongoose from 'mongoose';
+import { DataTypes } from 'sequelize';
+import sequelize from '../config/sequelize.js';
 
-const locationSchema = new mongoose.Schema({
-  // Associated Trip and Vehicle
-  trip: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Trip',
-    required: [true, 'Trip reference is required']
+const Location = sequelize.define('Location', {
+  // Primary key
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
   },
-  vehicle: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Vehicle',
-    required: [true, 'Vehicle reference is required']
-  },
-  driver: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Driver',
-    required: [true, 'Driver reference is required']
-  },
-  
-  // GPS Coordinates
-  coordinates: {
-    latitude: {
-      type: Number,
-      required: [true, 'Latitude is required'],
-      min: [-90, 'Latitude must be between -90 and 90'],
-      max: [90, 'Latitude must be between -90 and 90']
+
+  // Foreign keys with proper constraints
+  tripId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { 
+      model: 'Trips', 
+      key: 'id' 
     },
-    longitude: {
-      type: Number,
-      required: [true, 'Longitude is required'],
-      min: [-180, 'Longitude must be between -180 and 180'],
-      max: [180, 'Longitude must be between -180 and 180']
-    },
-    altitude: {
-      type: Number, // in meters
-      default: null
-    },
-    accuracy: {
-      type: Number, // in meters
-      min: [0, 'Accuracy cannot be negative']
-    }
+    onDelete: 'CASCADE',
+    onUpdate: 'CASCADE',
   },
-  
+  vehicleId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { 
+      model: 'Vehicles', 
+      key: 'id' 
+    },
+    onDelete: 'CASCADE',
+    onUpdate: 'CASCADE',
+  },
+  driverId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { 
+      model: 'Drivers', 
+      key: 'id' 
+    },
+    onDelete: 'CASCADE',
+    onUpdate: 'CASCADE',
+  },
+
+  // GPS Coordinates with proper precision and validation
+  latitude: { 
+    type: DataTypes.DECIMAL(10, 8), // Better precision for coordinates
+    allowNull: false,
+    validate: {
+      min: -90,
+      max: 90,
+    },
+  },
+  longitude: { 
+    type: DataTypes.DECIMAL(11, 8),
+    allowNull: false,
+    validate: {
+      min: -180,
+      max: 180,
+    },
+  },
+  altitude: { 
+    type: DataTypes.DECIMAL(8, 2), // Meters, with decimals
+    allowNull: true,
+  },
+  accuracy: { 
+    type: DataTypes.DECIMAL(8, 2), // GPS accuracy in meters
+    allowNull: true,
+    validate: {
+      min: 0,
+    },
+  },
+
   // Timestamp
-  timestamp: {
-    type: Date,
-    required: [true, 'Timestamp is required'],
-    default: Date.now,
-    index: true
+  timestamp: { 
+    type: DataTypes.DATE, 
+    allowNull: false, 
+    defaultValue: DataTypes.NOW,
   },
-  
-  // Speed and Direction
-  speed: {
-    value: {
-      type: Number,
-      min: [0, 'Speed cannot be negative']
+
+  // Speed and Direction with proper constraints
+  speed: { 
+    type: DataTypes.DECIMAL(6, 2),
+    allowNull: true,
+    validate: {
+      min: 0,
     },
-    unit: {
-      type: String,
-      enum: ['kmh', 'mph', 'ms'],
-      default: 'kmh'
-    }
   },
-  heading: {
-    type: Number, // in degrees (0-360)
-    min: [0, 'Heading must be between 0 and 360'],
-    max: [360, 'Heading must be between 0 and 360']
+  speedUnit: { 
+    type: DataTypes.ENUM('km/h', 'mph', 'm/s'),
+    allowNull: true,
+    defaultValue: 'km/h',
   },
-  
-  // Address Information (reverse geocoded)
-  address: {
-    formatted: {
-      type: String,
-      trim: true
+  heading: { 
+    type: DataTypes.DECIMAL(5, 2), // Degrees (0-360)
+    allowNull: true,
+    validate: {
+      min: 0,
+      max: 360,
     },
-    street: {
-      type: String,
-      trim: true
-    },
-    city: {
-      type: String,
-      trim: true
-    },
-    state: {
-      type: String,
-      trim: true
-    },
-    country: {
-      type: String,
-      trim: true
-    },
-    postalCode: {
-      type: String,
-      trim: true
-    }
   },
-  
-  // Location Type
-  locationType: {
-    type: String,
-    enum: {
-      values: ['start', 'waypoint', 'destination', 'tracking', 'stop', 'incident', 'fuel', 'other'],
-      message: 'Location type must be one of: start, waypoint, destination, tracking, stop, incident, fuel, other'
-    },
-    default: 'tracking'
+
+  // Address Information with proper field lengths
+  addressFormatted: { 
+    type: DataTypes.TEXT,
+    allowNull: true,
   },
-  
-  // Vehicle Status at this location
-  vehicleStatus: {
-    ignition: {
-      type: Boolean,
-      default: null
-    },
-    engine: {
-      type: Boolean,
-      default: null
-    },
-    doors: {
-      type: String,
-      enum: ['open', 'closed', 'unknown'],
-      default: 'unknown'
-    },
-    fuel: {
-      level: {
-        type: Number,
-        min: [0, 'Fuel level cannot be negative'],
-        max: [100, 'Fuel level cannot exceed 100%']
-      },
-      unit: {
-        type: String,
-        enum: ['percentage', 'liters', 'gallons'],
-        default: 'percentage'
-      }
-    },
-    odometer: {
-      reading: {
-        type: Number,
-        min: [0, 'Odometer reading cannot be negative']
-      },
-      unit: {
-        type: String,
-        enum: ['km', 'miles'],
-        default: 'km'
-      }
-    }
+  addressStreet: { 
+    type: DataTypes.STRING(255),
+    allowNull: true,
   },
-  
-  // Environmental Data
-  environment: {
-    temperature: {
-      type: Number // in Celsius
-    },
-    humidity: {
-      type: Number,
-      min: [0, 'Humidity cannot be negative'],
-      max: [100, 'Humidity cannot exceed 100%']
-    },
-    weather: {
-      type: String,
-      enum: ['clear', 'cloudy', 'rainy', 'snowy', 'foggy', 'stormy', 'unknown'],
-      default: 'unknown'
-    }
+  addressCity: { 
+    type: DataTypes.STRING(100),
+    allowNull: true,
   },
-  
-  // Geofence Information
-  geofences: [{
-    name: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    type: {
-      type: String,
-      enum: ['depot', 'customer', 'fuel-station', 'service-center', 'restricted', 'other'],
-      required: true
-    },
-    event: {
-      type: String,
-      enum: ['enter', 'exit'],
-      required: true
-    },
-    timestamp: {
-      type: Date,
-      default: Date.now
-    }
-  }],
-  
-  // Alerts and Events
-  alerts: [{
-    type: {
-      type: String,
-      enum: ['speeding', 'harsh-braking', 'harsh-acceleration', 'idle-time', 'route-deviation', 'panic', 'other'],
-      required: true
-    },
-    severity: {
-      type: String,
-      enum: ['low', 'medium', 'high', 'critical'],
-      default: 'medium'
-    },
-    description: {
-      type: String,
-      trim: true,
-      maxlength: [200, 'Alert description cannot exceed 200 characters']
-    },
-    value: {
-      type: Number // For alerts with numeric values (e.g., speed)
-    },
-    threshold: {
-      type: Number // The threshold that was exceeded
-    },
-    acknowledged: {
-      type: Boolean,
-      default: false
-    },
-    acknowledgedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    acknowledgedAt: {
-      type: Date
-    }
-  }],
-  
-  // Data Source
-  source: {
-    device: {
-      type: String,
-      trim: true,
-      maxlength: [50, 'Device name cannot exceed 50 characters']
-    },
-    deviceId: {
-      type: String,
-      trim: true,
-      maxlength: [50, 'Device ID cannot exceed 50 characters']
-    },
-    provider: {
-      type: String,
-      trim: true,
-      maxlength: [50, 'Provider name cannot exceed 50 characters']
-    },
-    signalStrength: {
-      type: Number,
-      min: [0, 'Signal strength cannot be negative'],
-      max: [100, 'Signal strength cannot exceed 100%']
-    }
+  addressState: { 
+    type: DataTypes.STRING(100),
+    allowNull: true,
   },
-  
-  // Data Quality
-  quality: {
-    gpsQuality: {
-      type: String,
-      enum: ['excellent', 'good', 'fair', 'poor'],
-      default: 'good'
+  addressCountry: { 
+    type: DataTypes.STRING(100),
+    allowNull: true,
+  },
+  addressPostalCode: { 
+    type: DataTypes.STRING(20),
+    allowNull: true,
+  },
+
+  // Location Type with predefined options
+  locationType: { 
+    type: DataTypes.ENUM(
+      'start', 'end', 'waypoint', 'stop', 'parking', 
+      'fuel_station', 'maintenance', 'depot', 'other'
+    ),
+    allowNull: true,
+    defaultValue: 'waypoint',
+  },
+
+  // Vehicle Status with proper data types
+  ignition: { 
+    type: DataTypes.BOOLEAN,
+    allowNull: true,
+  },
+  engine: { 
+    type: DataTypes.BOOLEAN,
+    allowNull: true,
+  },
+  doors: { 
+    type: DataTypes.ENUM('all_closed', 'driver_open', 'passenger_open', 'rear_open', 'multiple_open'),
+    allowNull: true,
+  },
+  fuelLevel: { 
+    type: DataTypes.DECIMAL(5, 2), // Percentage 0-100.00
+    allowNull: true,
+    validate: {
+      min: 0,
+      max: 100,
     },
-    satelliteCount: {
-      type: Number,
-      min: [0, 'Satellite count cannot be negative']
+  },
+  fuelUnit: { 
+    type: DataTypes.ENUM('percentage', 'liters', 'gallons'),
+    allowNull: true,
+    defaultValue: 'percentage',
+  },
+  odometerReading: { 
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    validate: {
+      min: 0,
     },
-    hdop: {
-      type: Number, // Horizontal Dilution of Precision
-      min: [0, 'HDOP cannot be negative']
-    }
   },
-  
-  // Processing Status
-  processed: {
-    type: Boolean,
-    default: false
+  odometerUnit: { 
+    type: DataTypes.ENUM('km', 'miles'),
+    allowNull: true,
+    defaultValue: 'km',
   },
-  processedAt: {
-    type: Date
+
+  // Environmental Data with constraints
+  temperature: { 
+    type: DataTypes.DECIMAL(5, 2), // Celsius
+    allowNull: true,
+    validate: {
+      min: -50,
+      max: 70, // Reasonable temperature range for vehicle operations
+    },
   },
-  
+  humidity: { 
+    type: DataTypes.DECIMAL(5, 2), // Percentage
+    allowNull: true,
+    validate: {
+      min: 0,
+      max: 100,
+    },
+  },
+  weather: { 
+    type: DataTypes.ENUM(
+      'clear', 'cloudy', 'rain', 'snow', 'fog', 
+      'storm', 'wind', 'hot', 'cold', 'unknown'
+    ),
+    allowNull: true,
+  },
+
   // Notes
-  notes: {
-    type: String,
-    maxlength: [500, 'Notes cannot exceed 500 characters']
-  }
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
+  notes: { 
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
 
-// Compound indexes for efficient queries
-locationSchema.index({ trip: 1, timestamp: 1 });
-locationSchema.index({ vehicle: 1, timestamp: -1 });
-locationSchema.index({ driver: 1, timestamp: -1 });
-locationSchema.index({ 'coordinates.latitude': 1, 'coordinates.longitude': 1 });
-locationSchema.index({ timestamp: -1 });
-locationSchema.index({ locationType: 1 });
+  // Data Source with constraints
+  device: { 
+    type: DataTypes.STRING(100),
+    allowNull: true,
+  },
+  deviceId: { 
+    type: DataTypes.STRING(100),
+    allowNull: true,
+  },
+  provider: { 
+    type: DataTypes.ENUM('gps', 'cellular', 'wifi', 'bluetooth', 'manual', 'obd', 'telematics'),
+    allowNull: true,
+  },
+  signalStrength: { 
+    type: DataTypes.DECIMAL(5, 2), // Signal strength percentage or dBm
+    allowNull: true,
+  },
 
-// Geospatial index for location-based queries
-locationSchema.index({ 
-  'coordinates.latitude': '2dsphere',
-  'coordinates.longitude': '2dsphere'
-});
-
-// Virtual for coordinate array (useful for mapping libraries)
-locationSchema.virtual('coordinateArray').get(function() {
-  return [this.coordinates.longitude, this.coordinates.latitude];
-});
-
-// Virtual for GeoJSON point
-locationSchema.virtual('geoJson').get(function() {
-  return {
-    type: 'Point',
-    coordinates: [this.coordinates.longitude, this.coordinates.latitude]
-  };
-});
-
-// Static methods
-locationSchema.statics.findByTrip = function(tripId, limit = 100) {
-  return this.find({ trip: tripId })
-    .sort({ timestamp: 1 })
-    .limit(limit);
-};
-
-locationSchema.statics.findByVehicle = function(vehicleId, startDate, endDate) {
-  const query = { vehicle: vehicleId };
-  if (startDate || endDate) {
-    query.timestamp = {};
-    if (startDate) query.timestamp.$gte = startDate;
-    if (endDate) query.timestamp.$lte = endDate;
-  }
-  return this.find(query).sort({ timestamp: -1 });
-};
-
-locationSchema.statics.findLatestByVehicle = function(vehicleId) {
-  return this.findOne({ vehicle: vehicleId })
-    .sort({ timestamp: -1 });
-};
-
-locationSchema.statics.findInRadius = function(latitude, longitude, radiusInMeters) {
-  return this.find({
-    'coordinates.latitude': {
-      $gte: latitude - (radiusInMeters / 111320),
-      $lte: latitude + (radiusInMeters / 111320)
+  // Data Quality with proper constraints
+  gpsQuality: { 
+    type: DataTypes.ENUM('excellent', 'good', 'fair', 'poor', 'no_signal'),
+    allowNull: true,
+  },
+  satelliteCount: { 
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    validate: {
+      min: 0,
+      max: 50, // Reasonable max satellites
     },
-    'coordinates.longitude': {
-      $gte: longitude - (radiusInMeters / (111320 * Math.cos(latitude * Math.PI / 180))),
-      $lte: longitude + (radiusInMeters / (111320 * Math.cos(latitude * Math.PI / 180)))
-    }
-  });
-};
+  },
+  hdop: { 
+    type: DataTypes.DECIMAL(4, 2), // Horizontal Dilution of Precision
+    allowNull: true,
+    validate: {
+      min: 0,
+    },
+  },
 
-locationSchema.statics.findWithAlerts = function(alertType = null) {
-  const query = { 'alerts.0': { $exists: true } };
-  if (alertType) {
-    query['alerts.type'] = alertType;
-  }
-  return this.find(query).sort({ timestamp: -1 });
-};
+  // Processing Status
+  processed: { 
+    type: DataTypes.BOOLEAN, 
+    defaultValue: false,
+    allowNull: false,
+  },
+  processedAt: { 
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  processedBy: {
+    type: DataTypes.STRING(50), // System/user that processed the data
+    allowNull: true,
+  },
 
-// Instance methods
-locationSchema.methods.calculateDistanceFrom = function(otherLocation) {
-  const R = 6371; // Earth's radius in kilometers
-  const dLat = (otherLocation.coordinates.latitude - this.coordinates.latitude) * Math.PI / 180;
-  const dLon = (otherLocation.coordinates.longitude - this.coordinates.longitude) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(this.coordinates.latitude * Math.PI / 180) * Math.cos(otherLocation.coordinates.latitude * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; // Distance in kilometers
-};
-
-const Location = mongoose.model('Location', locationSchema);
+  // Additional tracking fields
+  isGeofenceEvent: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
+  geofenceId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'Geofences', // If you have a geofences table
+      key: 'id',
+    },
+  },
+  eventType: {
+    type: DataTypes.ENUM(
+      'location_update', 'geofence_enter', 'geofence_exit', 
+      'speed_limit_exceeded', 'harsh_braking', 'harsh_acceleration',
+      'idle_start', 'idle_end', 'engine_on', 'engine_off'
+    ),
+    allowNull: true,
+  },
+}, {
+  tableName: 'locations',
+  timestamps: true, // Adds createdAt and updatedAt
+  indexes: [
+    // Primary indexes for relationships
+    {
+      fields: ['tripId'],
+    },
+    {
+      fields: ['vehicleId'],
+    },
+    {
+      fields: ['driverId'],
+    },
+    // Timestamp index for time-based queries
+    {
+      fields: ['timestamp'],
+    },
+    // Location-based indexes
+    {
+      fields: ['latitude', 'longitude'],
+    },
+    // Composite indexes for common query patterns
+    {
+      fields: ['vehicleId', 'timestamp'],
+    },
+    {
+      fields: ['tripId', 'timestamp'],
+    },
+    {
+      fields: ['driverId', 'timestamp'],
+    },
+    // Event-based indexes
+    {
+      fields: ['locationType'],
+    },
+    {
+      fields: ['eventType'],
+    },
+    {
+      fields: ['processed'],
+    },
+    // Geospatial index (if your database supports it)
+    // Note: This requires database-specific configuration
+    // {
+    //   fields: ['latitude', 'longitude'],
+    //   type: 'SPATIAL'
+    // },
+  ],
+  validate: {
+    // Custom validation: ensure coordinates are provided together
+    coordinatesComplete() {
+      if ((this.latitude === null) !== (this.longitude === null)) {
+        throw new Error('Both latitude and longitude must be provided together');
+      }
+    },
+    // Validate fuel level is reasonable
+    fuelLevelRange() {
+      if (this.fuelLevel !== null && this.fuelUnit === 'percentage') {
+        if (this.fuelLevel < 0 || this.fuelLevel > 100) {
+          throw new Error('Fuel level percentage must be between 0 and 100');
+        }
+      }
+    },
+  },
+});
 
 export default Location;
